@@ -1,0 +1,21 @@
+# Environment
+.env
+.venv/
+venv/
+
+# Generated files
+twitter_cookies.json
+memory.json
+*.pyc
+__pycache__/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
