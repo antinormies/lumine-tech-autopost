@@ -63,6 +63,7 @@ SELECTORS = {
     "unlike_button": '[data-testid="unlike"]',
     "retweet_button": '[data-testid="retweet"]',
     "retweet_confirm": '[data-testid="retweetConfirm"]',
+    "quote_option": '[data-testid="quote"]',
     "bookmark_button": '[data-testid="bookmark"]',
     "reply_button": '[data-testid="reply"]',
     # Navigation

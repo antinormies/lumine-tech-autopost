@@ -21,18 +21,18 @@ class Config:
     BROWSER_EXECUTABLE_PATH: str = os.getenv("BROWSER_EXECUTABLE_PATH", "")
 
     # Behavior
-    MIN_DELAY_SECONDS: int = int(os.getenv("MIN_DELAY_SECONDS", "10"))
-    MAX_DELAY_SECONDS: int = int(os.getenv("MAX_DELAY_SECONDS", "45"))
+    MIN_DELAY_SECONDS: int = int(os.getenv("MIN_DELAY_SECONDS", "8"))
+    MAX_DELAY_SECONDS: int = int(os.getenv("MAX_DELAY_SECONDS", "35"))
     ACTIVE_HOURS_START: int = int(os.getenv("ACTIVE_HOURS_START", "8"))
     ACTIVE_HOURS_END: int = int(os.getenv("ACTIVE_HOURS_END", "22"))
-    MAX_TWEETS_PER_SESSION: int = int(os.getenv("MAX_TWEETS_PER_SESSION", "2"))
-    MAX_LIKES_PER_SESSION: int = int(os.getenv("MAX_LIKES_PER_SESSION", "5"))
-    MAX_REPLIES_PER_SESSION: int = int(os.getenv("MAX_REPLIES_PER_SESSION", "3"))
-    MAX_RETWEETS_PER_SESSION: int = int(os.getenv("MAX_RETWEETS_PER_SESSION", "2"))
-    MAX_ENGAGEMENTS: int = int(os.getenv("MAX_ENGAGEMENTS", "6"))
+    MAX_TWEETS_PER_SESSION: int = int(os.getenv("MAX_TWEETS_PER_SESSION", "8"))
+    MAX_LIKES_PER_SESSION: int = int(os.getenv("MAX_LIKES_PER_SESSION", "20"))
+    MAX_REPLIES_PER_SESSION: int = int(os.getenv("MAX_REPLIES_PER_SESSION", "10"))
+    MAX_RETWEETS_PER_SESSION: int = int(os.getenv("MAX_RETWEETS_PER_SESSION", "8"))
+    MAX_ENGAGEMENTS: int = int(os.getenv("MAX_ENGAGEMENTS", "30"))
 
     # Persona
-    DEFAULT_PERSONA: str = os.getenv("DEFAULT_PERSONA", "tech_enthusiast")
+    DEFAULT_PERSONA: str = os.getenv("DEFAULT_PERSONA", "finance_investor")
 
 
 config = Config()

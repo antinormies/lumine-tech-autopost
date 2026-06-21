@@ -15,39 +15,29 @@ from utils.helpers import random_delay
 
 
 VISION_SYSTEM_INSTRUCTION = (
-    "You are a human browsing Twitter/X naturally. You see a screenshot of the page.\n\n"
-    "Available actions:\n"
-    "- click (target)\n"
-    "- type (target, text)\n"
-    "- scroll_down (amount in pixels)\n"
-    "- scroll_up (amount in pixels)\n"
-    "- navigate (url)\n"
-    "- wait (seconds)\n"
-    "- tweet (text)\n"
-    "- like (tweet_index: 0-based)\n"
-    "- reply (tweet_index, text)\n"
-    "- retweet (tweet_index)\n"
-    "- bookmark (tweet_index)\n"
-    "- cancel_compose\n"
-    "- done (reason)\n\n"
-    "Target elements: tweet_compose, sidebar_tweet, like_button, reply_button, "
-    "home_link, explore_link, bookmark_button\n\n"
-    "BEHAVE LIKE A REAL HUMAN:\n"
-    "- After every 1-2 scrolls, STOP and interact with a tweet (like, reply, or retweet)\n"
-    "- Like tweets that interest you — this is the most common action\n"
-    "- Reply to discussions with short, natural replies\n"
-    "- Retweet content worth sharing\n"
-    "- Post an original tweet occasionally\n"
-    "- Vary what you do — don't repeat the same action\n"
-    "- Take your time. Read before interacting.\n"
-    "- NEVER scroll more than 2 times without engaging with something\n"
-    "- Mix between Home feed and Explore page\n\n"
-    "EXAMPLE of good variety:\n"
-    "scroll → like → scroll → reply → scroll → like → tweet → scroll → retweet → like\n\n"
-    "BAD pattern (DON'T do this):\n"
-    "scroll → scroll → scroll → scroll → scroll → scroll (boring lurker!)\n"
-    "IMPORTANT: Respond ONLY with JSON:\n"
-    '{"action": "...", "reason": "...", "target": "...", "text": "...", "tweet_index": 0, "amount": 600, "seconds": 5}'
+    "You are a real human scrolling Twitter. You see a screenshot with visible tweets.\n\n"
+    "ACTIONS you can use:\n"
+    "- scroll_down / scroll — scroll feed (do this 5-15+ times)\n"
+    "- like(tweet_index) — LIKE. DO THIS A LOT (0=first)\n"
+    "- retweet(tweet_index) — RETWEET interesting content\n"
+    "- quote(tweet_index, text) — QUOTE with your comment\n"
+    "- tweet(text) — POST. ABSOLUTELY NO HASHTAGS OR TAGS.\n"
+    "- bookmark(tweet_index) — save\n"
+    "- click(target) — ONLY sidebar_tweet\n"
+    "- cancel_compose — close compose\n"
+    "- done(reason) — end\n\n"
+    "CRITICAL: NEVER write hashtags (#) or @mentions in ANY text. "
+    "Write naturally like a normal person talking. "
+    "Example: say 'IHSG looking weak' NOT 'IHSG looking weak #stocks'.\n\n"
+    "RULES:\n"
+    "1. LIKE tweets OFTEN — multiple per session.\n"
+    "2. RETWEET content worth sharing.\n"
+    "3. QUOTE interesting tweets with your take.\n"
+    "4. POST original thoughts (NO hashtags).\n"
+    "5. SCROLL a LOT between actions.\n"
+    "6. NEVER click on usernames or navigate away.\n\n"
+    "Respond ONLY with JSON:\n"
+    '{"action": "...", "reason": "why you chose this", "target": "...", "text": "...", "tweet_index": 0, "amount": 600, "seconds": 5}'
 )
 
 
@@ -84,14 +74,48 @@ class VisionAgent:
 
         max_eng = config.MAX_ENGAGEMENTS
         eng = self.memory.total_engagements()
-        can_engage = eng < max_eng
+        recent = self.memory.recent_summary(3)
+        total_actions = len(self.memory.actions)
+        last_3_actions = [a["action"] for a in self.memory.actions[-3:]]
+        has_posted = self.memory.engagement_counts.get("tweet", 0)
+        has_retweeted = self.memory.engagement_counts.get("retweet", 0)
+        has_quoted = self.memory.engagement_counts.get("quote", 0)
+
+        post_suggestion = ""
+        if total_actions > 2 and has_posted < 1 and eng < max_eng:
+            post_suggestion = " POST something!"
+        elif total_actions > 5 and has_posted < 3 and eng < max_eng:
+            post_suggestion = " Post another!"
+
+        like_count = self.memory.engagement_counts.get("like", 0)
+        retweet_count = self.memory.engagement_counts.get("retweet", 0)
+        quote_count = self.memory.engagement_counts.get("quote", 0)
+        reply_count = self.memory.engagement_counts.get("reply", 0)
+        total_engage = like_count + retweet_count + quote_count + reply_count
+
+        engage_nudge = ""
+        if total_engage == 0 and total_actions > 3 and eng < max_eng:
+            engage_nudge = " LIKE or RETWEET a visible tweet NOW."
+        elif total_engage < 2 and total_actions > 5 and eng < max_eng:
+            engage_nudge = " LIKE or RETWEET something visible!"
+        elif total_engage < 4 and total_actions > 8 and eng < max_eng:
+            engage_nudge = " LIKE or QUOTE a tweet you see!"
+
+        composer_check = ""
+        if "type" in last_3_actions and "tweet" not in last_3_actions:
+            composer_check = " You've been typing manually. Use 'tweet' action instead."
+        navigate_check = ""
+        last_targets = [str((a.get("params") or {}).get("target") or "") for a in self.memory.actions[-3:]]
+        bad_nav = any(kw in t.lower() for t in last_targets for kw in ("explore", "search", "notification", "message"))
+        if "navigate" in last_3_actions or bad_nav:
+            navigate_check = " STAY on feed."
 
         user_text = (
             f"I'm on Twitter. Current URL: {url}\n"
             f"{last_result}"
-            f"Engagements this session: {eng}/{max_eng} (can {'still engage' if can_engage else 'only browse'})\n"
-            f"What should I do next? Look at the screenshot and decide.\n"
-            f"Recent actions: {self.memory.recent_summary()}"
+            f"Engagements: {eng}/{max_eng} | Last: {', '.join(last_3_actions)}\n"
+            f"{post_suggestion}{engage_nudge}{composer_check}{navigate_check}"
+            f"Look at screenshot. What next?"
         )
 
         response = self.llm.vision_chat(

@@ -1,4 +1,5 @@
 import random
+import re
 import time
 from playwright.sync_api import Page
 
@@ -31,6 +32,13 @@ def click(page: Page, target: str) -> bool:
     if not target:
         logger.warning("No target specified for click")
         return False
+    resolved = resolve_target(target)
+    if resolved in {"home_link", "explore_link", "notifications_link", "messages_link", "search_box"}:
+        logger.info(f"Blocked navigation: {target}")
+        return False
+    if resolved != "sidebar_tweet":
+        logger.info(f"Blocked non-essential click: {target}")
+        return False
     el = find_element(page, target)
     desc = ELEMENT_DESCRIPTIONS.get(target, target)
     try:
@@ -46,14 +54,20 @@ def click(page: Page, target: str) -> bool:
         return False
 
 
+COMPOSE_TARGETS = {"compose", "tweet_compose", "compose_textarea", "composer", "textarea", "post"}
+
+
 def type_text(page: Page, target: str, text: str) -> bool:
-    if not target:
-        compose = page.locator(SELECTORS["tweet_compose"]).first
-        if compose.is_visible(timeout=2000):
-            target = "tweet_compose"
-        else:
-            logger.warning("No target specified and no compose textarea visible")
-            return False
+    if not target or target.lower() in COMPOSE_TARGETS:
+        textarea = page.locator(SELECTORS["tweet_compose"]).first
+        if textarea.is_visible(timeout=2000):
+            textarea.focus()
+            page.keyboard.type(clean_text(text), delay=random.randint(20, 60))
+            logger.info(f"Typed into compose textarea")
+            time.sleep(0.5)
+            return True
+        logger.warning("No compose textarea visible")
+        return False
     el = find_element(page, target)
     desc = ELEMENT_DESCRIPTIONS.get(target, target)
     try:
@@ -113,37 +127,43 @@ def wait(seconds: int) -> bool:
     return True
 
 
+def clean_text(text: str) -> str:
+    text = re.sub(r'[#＃][\w\u0080-\uFFFF]+', '', text)
+    text = re.sub(r'[@＠][\w\u0080-\uFFFF]+', '', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text or "."
+
+
 def tweet(page: Page, text: str) -> bool:
     try:
-        post_btn = page.locator(SELECTORS["tweet_button"])
-        compose_open = post_btn.is_visible(timeout=2000) or page.locator(SELECTORS["tweet_compose"]).first.is_visible(timeout=2000)
-
-        if not compose_open:
+        text = clean_text(text)
+        textarea = page.locator(SELECTORS["tweet_compose"]).first
+        if not textarea.is_visible(timeout=3000):
             sidebar = page.locator(SELECTORS["sidebar_tweet"])
-            if sidebar.is_visible(timeout=3000):
-                sidebar.click()
-                time.sleep(1.5)
+            sidebar.wait_for(timeout=5000)
+            sidebar.click()
+            time.sleep(1.5)
+            textarea.wait_for(timeout=5000)
 
-        compose = page.locator(SELECTORS["tweet_compose"]).first
-        compose.click()
-        compose.fill(text)
+        _jitter_mouse(page)
+        textarea.focus()
+        time.sleep(0.3)
+        page.keyboard.type(text, delay=random.randint(30, 90))
+        time.sleep(0.5)
+
+        post_btn = page.locator(SELECTORS["tweet_button_small"])
+        if not post_btn.is_visible(timeout=2000):
+            post_btn = page.locator(SELECTORS["tweet_button"])
+        post_btn.wait_for(timeout=5000)
+        timeout_end = time.time() + 10
+        while time.time() < timeout_end:
+            if post_btn.is_enabled():
+                break
+            time.sleep(0.5)
+        post_btn.click(force=True)
+        logger.info(f"Tweet posted: {text[:50]}...")
         time.sleep(1)
-
-        if post_btn.is_visible(timeout=3000):
-            post_btn.click()
-            logger.info(f"Tweet posted: {text[:50]}...")
-            time.sleep(2)
-            return True
-
-        btn2 = page.locator(SELECTORS["tweet_button_small"])
-        if btn2.is_visible(timeout=3000):
-            btn2.click()
-            logger.info(f"Tweet posted: {text[:50]}...")
-            time.sleep(2)
-            return True
-
-        logger.warning("Could not find tweet button")
-        return False
+        return True
     except Exception as e:
         logger.error(f"Failed to tweet: {e}")
         return False
@@ -175,7 +195,7 @@ def reply_to_tweet(page: Page, index: int, text: str) -> bool:
         reply_btn.click()
         time.sleep(2)
         reply_area = page.locator('[data-testid="tweetTextarea_0"]')
-        reply_area.fill(text)
+        reply_area.fill(clean_text(text))
         time.sleep(1)
         page.locator('[data-testid="tweetButton"]').click()
         logger.info(f"Replied to tweet #{index}")
@@ -193,14 +213,37 @@ def retweet_nth(page: Page, index: int = 0) -> bool:
     try:
         rt_btn = tweets[index].locator(SELECTORS["retweet_button"])
         rt_btn.click()
-        time.sleep(1)
         confirm = page.locator(SELECTORS["retweet_confirm"])
+        confirm.wait_for(timeout=3000)
         confirm.click()
         logger.info(f"Retweeted tweet #{index}")
-        time.sleep(1)
         return True
     except Exception as e:
         logger.warning(f"Failed to retweet: {e}")
+        return False
+
+
+def quote_tweet(page: Page, index: int, text: str) -> bool:
+    tweets = page.locator(SELECTORS["tweet_article"]).all()
+    if index >= len(tweets):
+        return False
+    try:
+        rt_btn = tweets[index].locator(SELECTORS["retweet_button"])
+        rt_btn.click()
+        quote_btn = page.locator(SELECTORS["quote_option"])
+        quote_btn.wait_for(timeout=3000)
+        quote_btn.click()
+        time.sleep(1)
+        compose = page.locator(SELECTORS["tweet_compose"])
+        compose.fill(clean_text(text))
+        time.sleep(0.5)
+        post_btn = page.locator(SELECTORS["tweet_button"])
+        post_btn.click()
+        logger.info(f"Quoted tweet #{index}")
+        time.sleep(1)
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to quote: {e}")
         return False
 
 
@@ -240,12 +283,14 @@ ACTION_REGISTRY = {
     "type": lambda page, params: type_text(page, params.get("target", ""), params.get("text", "")),
     "scroll_down": lambda page, params: scroll_down(page, params.get("amount", 600)),
     "scroll_up": lambda page, params: scroll_up(page, params.get("amount", 600)),
+    "scroll": lambda page, params: scroll_down(page, params.get("amount", 600)),
     "navigate": lambda page, params: navigate(page, params.get("url", "")),
     "wait": lambda page, params: wait(params.get("seconds", 5)),
     "tweet": lambda page, params: tweet(page, params.get("text", "")),
     "like": lambda page, params: like_nth_tweet(page, params.get("tweet_index", 0)),
     "reply": lambda page, params: reply_to_tweet(page, params.get("tweet_index", 0), params.get("text", "")),
     "retweet": lambda page, params: retweet_nth(page, params.get("tweet_index", 0)),
+    "quote": lambda page, params: quote_tweet(page, params.get("tweet_index", 0), params.get("text", "")),
     "bookmark": lambda page, params: bookmark_nth(page, params.get("tweet_index", 0)),
     "cancel_compose": lambda page, params: cancel_compose(page),
 }

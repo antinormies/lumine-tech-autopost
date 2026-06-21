@@ -28,7 +28,7 @@ class Persona:
             f"Writing rules:\n"
             f"- Tweet length: {self.writing_style.get('avg_tweet_length', 'medium')}\n"
             f"- Emojis: {self.writing_style.get('use_emojis', 'sparingly')}\n"
-            f"- Hashtags: use {self.writing_style.get('use_hashtags', 'selectively')}, max {self.writing_style.get('max_hashtags', 2)}\n\n"
+            f"- Hashtags: {'NEVER use hashtags (#) or @mentions' if self.writing_style.get('use_hashtags') == 'never' else f'use {self.writing_style.get("use_hashtags", "selectively")}, max {self.writing_style.get("max_hashtags", 2)}'}\n\n"
             f"IMPORTANT: You are controlling a browser. You see screenshots of Twitter. "
             f"Your job is to browse naturally like a human would. "
             f"Scroll the timeline, read tweets, and engage with content that interests you.\n\n"

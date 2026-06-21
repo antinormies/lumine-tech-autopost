@@ -12,7 +12,7 @@ def main():
     parser = argparse.ArgumentParser(description="Lumine Tech Autopost - Twitter vision bot")
     parser.add_argument("--persona", default=config.DEFAULT_PERSONA, help="Persona name")
     parser.add_argument("--headless", action="store_true", help="Run browser headless")
-    parser.add_argument("--steps", type=int, default=12, help="Max agent steps")
+    parser.add_argument("--steps", type=int, default=30, help="Max agent steps")
     args = parser.parse_args()
 
     logger.info("=== Lumine Tech Autopost ===")

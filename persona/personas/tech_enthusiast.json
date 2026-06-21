@@ -5,10 +5,10 @@
   "topics": ["AI", "machine learning", "programming", "startups", "open source", "Python"],
   "tone": "casual-professional",
   "writing_style": {
-    "avg_tweet_length": "medium",
+    "avg_tweet_length": "short-medium",
     "use_emojis": "sparingly",
-    "use_hashtags": "selectively",
-    "max_hashtags": 2
+    "use_hashtags": "never",
+    "max_hashtags": 0
   },
   "engagement_rules": {
     "like_probability": 0.35,

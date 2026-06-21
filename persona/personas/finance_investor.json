@@ -5,10 +5,10 @@
   "topics": ["forex", "Indonesian stock market", "IDX", "IHSG", "trading", "technical analysis", "fundamental analysis", "macroeconomic", "Bank Indonesia", "rupiah", "commodities", "emerging markets"],
   "tone": "professional-informative",
   "writing_style": {
-    "avg_tweet_length": "medium-long",
+    "avg_tweet_length": "short-medium",
     "use_emojis": "rarely",
-    "use_hashtags": "minimal",
-    "max_hashtags": 1
+    "use_hashtags": "never",
+    "max_hashtags": 0
   },
   "engagement_rules": {
     "like_probability": 0.25,
