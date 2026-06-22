@@ -34,7 +34,7 @@ VISION_SYSTEM_INSTRUCTION = (
     "- tweet(text) / compose(text) — post. NO hashtags/tags EVER.\n"
     "- open_tweet(tweet_index) — click to see detail + comments\n"
     "- like_comment(tweet_index) — like a comment\n"
-    "- reply(tweet_index, text) — reply to a post\n"
+    "- reply(tweet_index, text) — reply to a post (do this when you have something relevant to say)\n"
     "- bookmark(tweet_index) — save for later\n"
     "- open_profile(tweet_index) — click user name to see their profile\n"
     "- follow — click Follow button on a profile page\n"
@@ -54,6 +54,7 @@ VISION_SYSTEM_INSTRUCTION = (
     "- AVOID topics related to military or government/politics.\n\n"
     "KEY ACTIONS DURING SCROLLING:\n"
     "- LIKE every interesting post you see. Do this OFTEN.\n"
+    "- REPLY when you see something interesting — share your take, opinion, or question.\n"
     "- Find an interesting post? open_profile(tweet_index) to check the author.\n"
     "- Like 2-3 of their tweets. Follow if relevant.\n"
     "- See a smart take or hot take? BOOKMARK it.\n"
@@ -79,21 +80,25 @@ VISION_SYSTEM_INSTRUCTION = (
     "3. open_profile(tweet_index) on every interesting post — check their bio + tweets.\n"
     "4. LIKE 2-3 of their posts. Follow if relevant.\n"
     "5. QUOTE highly relevant posts with your take.\n"
-    "6. Spotted something surprising or noteworthy? search_topic('keyword') to find more.\n"
-    "7. Repeat steps 1-6 for ~10-20 actions. Then switch to Explore.\n\n"
+    "6. Repeat steps 1-5 for ~10-20 actions. Then switch to Explore or Search.\n\n"
     "CLUSTER B — EXPLORE (15-20 steps):\n"
-    "6. click(target='explore_link'). You see TREND TOPICS (links, not tweets). DO NOT scroll them.\n"
-    "7. click(target='For you') tab. Pick interest-matching trend: click_trend(N).\n"
-    "8. Scroll trend posts. LIKE + RETWEET + BOOKMARK + QUOTE heavily.\n"
-    "9. open_tweet -> reply -> LIKE comments. open_profile on EVERY interesting post.\n"
-    "10. open_profile(tweet_index) -> like 2-3 of their posts -> follow if relevant.\n"
-    "11. back to Explore. click_trend(1). Repeat until For You trends exhausted.\n"
-    "12. Then click(target='Trending') tab. Same cycle: click_trend(N) -> engage -> open_profile -> follow -> back -> next.\n"
-    "13. No matching trends? search_topic('interest keyword') — check profiles, follow.\n"
-    "14. Post if cooldown allows. Quote is NOT locked.\n"
-    "15. After ~15-20 Explore steps, switch back to Home (CLUSTER A).\n\n"
-    "15. Use 'rest' after ~150 total actions. Restart from Cluster A.\n"
-    "16. NEVER engage same tweet_index twice.\n\n"
+    "7. click(target='explore_link'). You see TREND TOPICS (links, not tweets). DO NOT scroll them.\n"
+    "8. click(target='For you') tab. Pick interest-matching trend: click_trend(N).\n"
+    "9. Scroll trend posts. LIKE + RETWEET + BOOKMARK + QUOTE heavily.\n"
+    "10. open_tweet -> reply -> LIKE comments. open_profile on EVERY interesting post.\n"
+    "11. open_profile(tweet_index) -> like 2-3 of their posts -> follow if relevant.\n"
+    "12. back to Explore. click_trend(1). Repeat until For You trends exhausted.\n"
+    "13. Then click(target='Trending') tab. Same cycle: click_trend(N) -> engage -> open_profile -> follow -> back -> next.\n"
+    "14. After ~15-20 Explore steps, switch to Home (A) or Search (C).\n\n"
+    "CLUSTER C — SEARCH (8-15 steps):\n"
+    "15. Use search_topic('keyword') to search for specific interests (cats, AI, crypto, stocks, music, etc).\n"
+    "16. The search box is at the top of X. It shows results — LIKE interesting posts.\n"
+    "17. open_tweet interesting results. LIKE comments. Reply if relevant.\n"
+    "18. open_profile on EVERY interesting person. LIKE 2-3 of their posts. Follow if relevant.\n"
+    "19. search_topic('different keyword') to try another topic.\n"
+    "20. Repeat 3-4 searches. Then switch back to Home (A) or Explore (B).\n\n"
+    "21. Use 'rest' after ~150 total actions. Restart from Cluster A.\n"
+    "22. NEVER engage same tweet_index twice.\n\n"
     "Respond ONLY JSON:\n"
     '{"action": "...", "reason": "...", "target": "...", "text": "...", "tweet_index": 0, "amount": 600, "seconds": 5}'
 )
@@ -171,6 +176,8 @@ class VisionAgent:
         for a in reversed(self.memory.actions[-5:]):
             if a["action"] in ("scroll", "scroll_down", "scroll_down_long"):
                 streak += 1
+            elif a.get("success") is False:
+                continue  # blocked/failed actions don't break the streak
             else:
                 break
         return streak
@@ -180,6 +187,7 @@ class VisionAgent:
         eng = self.memory.total_engagements()
         total = len(self.memory.actions)
         likes = self.memory.engagement_counts.get("like", 0)
+        replies = self.memory.engagement_counts.get("reply", 0)
         retweets = self.memory.engagement_counts.get("retweet", 0)
         quotes = self.memory.engagement_counts.get("quote", 0)
         bookmarks = self.memory.engagement_counts.get("bookmark", 0)
@@ -199,6 +207,7 @@ class VisionAgent:
         )
         searches = sum(1 for a in self.memory.actions if a["action"] == "search_topic")
         on_explore = "explore" in self._safe_url()
+        on_search = "/search?" in self._safe_url()
 
         if self._is_compose_open():
             can_post = self.memory.can_tweet(1.0)
@@ -214,6 +223,26 @@ class VisionAgent:
 
         has_trends = bool(trends_text.strip())
 
+        # ── On search results page ──
+        if on_search:
+            if likes < 4:
+                return "Search results — LIKE posts as you scroll."
+            if replies < 1:
+                return "Reply to something interesting in search results."
+            if profiles < 2:
+                return "open_profile on interesting people — check + follow."
+            if follows < 1 and profiles > 0:
+                return "You opened a profile — follow if relevant."
+            if opened < 2:
+                return "open_tweet to see comments."
+            if retweets < 1:
+                return "RETWEET something in results."
+            if quotes < 1:
+                return "QUOTE a result with your take."
+            if searches < 2:
+                return "search_topic('different keyword') for more."
+            return "search_topic another keyword or switch back to Home."
+
         # ── Cluster-aware nudge ──
         HOME_MIN, HOME_MAX = 10, 20
         EXPLORE_MIN, EXPLORE_MAX = 15, 20
@@ -223,6 +252,8 @@ class VisionAgent:
             if steps < HOME_MIN:
                 if likes < 4:
                     return "scroll_down_long + LIKE posts as you scroll."
+                if replies < 1:
+                    return "Reply to a post that interests you."
                 if profiles < 1:
                     return "open_profile(tweet_index) on an interesting post — check them out."
                 if follows < 1 and profiles > 0:
@@ -236,7 +267,7 @@ class VisionAgent:
                 if bookmarks < 1:
                     return "BOOKMARK a post."
                 if searches < 1:
-                    return "Spotted something interesting? search_topic('keyword')."
+                    return "Try search_topic('keyword') to find fresh content."
                 return "scroll_down_long + like more posts."
             return "SWITCH TO EXPLORE. click(target='explore_link')."
 
@@ -249,6 +280,8 @@ class VisionAgent:
                     return "click_trend(0) — stop scrolling, click a trend."
                 if likes < 6:
                     return "scroll trend posts -> LIKE + RETWEET + QUOTE."
+                if replies < 2:
+                    return "Reply to trend posts — share your take."
                 if profiles < 2:
                     return "open_profile on interesting trend posts — check + follow."
                 if follows < 1 and profiles > 0:
@@ -264,7 +297,7 @@ class VisionAgent:
                 if tab_clicks < 2:
                     return "After this trend, click(target='Trending') for real trends."
                 if searches < 2:
-                    return "No matching trends? search_topic('interest keyword')."
+                    return "Try search_topic('keyword') — search for specific topics instead."
                 return "click_trend another from Explore."
             return "SWITCH BACK TO HOME. click(target='home_link')."
         else:
@@ -510,8 +543,11 @@ class VisionAgent:
             target = str(decision.get("target", "")).strip()
             target_lower = target.lower()
             if target_lower in ("trending", "for you") and not on_explore:
-                logger.info(f"Normalized click({target}) -> explore_link (not on Explore)")
-                decision["target"] = "explore_link"
+                if target_lower == "trending":
+                    logger.info(f"Normalized click({target}) -> explore_link (Trending tab only exists on Explore)")
+                    decision["target"] = "explore_link"
+                else:
+                    logger.info("For you tab exists on Home — keeping as-is")
             elif target_lower == "scroll":
                 logger.info(f"Normalized click({target}) -> scroll_down")
                 decision["action"] = "scroll_down"
@@ -624,6 +660,17 @@ class VisionAgent:
 
         if success:
             self._post_blocks = 0
+
+        # After clicking a trend, wait for page load + auto-scroll to load content
+        if success and action == "click_trend":
+            try:
+                self.page.wait_for_load_state("networkidle", timeout=10000)
+                logger.info("Trend page loaded — auto-scrolling to reveal tweets")
+                self.page.mouse.wheel(0, 600)
+                time.sleep(1.5)
+                self.page.mouse.wheel(0, 600)
+            except Exception as e:
+                logger.warning(f"Auto-scroll after click_trend failed: {e}")
 
         # Auto-escape tweet detail after 2+ actions without going back
         if "/status/" in self._safe_url() and action not in ("back", "done"):
