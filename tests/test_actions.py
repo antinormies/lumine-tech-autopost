@@ -11,10 +11,12 @@ from agent.actions import (
     click,
     execute_action,
     find_element,
+    follow,
     go_back,
     like_comment,
     like_nth_tweet,
     navigate,
+    open_profile,
     open_tweet,
     quote_tweet,
     reply_to_tweet,
@@ -144,14 +146,22 @@ class TestFindElement:
 
 class TestBlockedClicks:
     def test_blocked_targets_are_defined(self):
-        assert "follow" in BLOCKED_CLICKS
-        assert "following" in BLOCKED_CLICKS
         assert "unfollow" in BLOCKED_CLICKS
         assert "like" in BLOCKED_CLICKS
         assert "direct_message" in BLOCKED_CLICKS
         assert "send" in BLOCKED_CLICKS
+        assert "follow" not in BLOCKED_CLICKS
+        assert "following" not in BLOCKED_CLICKS
 
-    @pytest.mark.parametrize("target", ["follow", "unfollow"])
+    def test_click_follow_no_longer_blocked(self, page):
+        page.locator.return_value = _make_locator()
+        page.locator.return_value.count.return_value = 0
+        text_loc = _make_locator()
+        text_loc.count.return_value = 1
+        page.get_by_text.return_value = text_loc
+        assert click(page, "follow") is True
+
+    @pytest.mark.parametrize("target", ["unfollow"])
     def test_click_returns_false_for_blocked(self, page, target):
         assert click(page, target) is False
 
@@ -581,6 +591,58 @@ class TestRest:
             assert rest(page) is False
 
 
+# ─── open_profile ───
+
+
+class TestOpenProfile:
+    def test_open_profile_success(self, page):
+        articles, _ = _make_tweet_articles()
+        page.locator.return_value = MagicMock()
+        page.locator.return_value.all.return_value = articles
+        assert open_profile(page, 0) is True
+        articles[0].locator.assert_called_with('[data-testid="User-Name"]')
+
+    def test_open_profile_index_out_of_range(self, page):
+        articles, _ = _make_tweet_articles(n=1)
+        page.locator.return_value = MagicMock()
+        page.locator.return_value.all.return_value = articles
+        assert open_profile(page, 5) is False
+
+    def test_open_profile_exception(self, page):
+        articles, _ = _make_tweet_articles()
+        page.locator.return_value = MagicMock()
+        page.locator.return_value.all.return_value = articles
+        articles[0].locator.side_effect = Exception("fail")
+        assert open_profile(page, 0) is False
+
+
+# ─── follow ───
+
+
+class TestFollow:
+    def test_follow_success(self, page):
+        btn = _make_locator()
+        btn.inner_text.return_value = "Follow"
+        page.locator.return_value = btn
+        assert follow(page) is True
+        btn.click.assert_called_once_with(force=True, timeout=5000)
+
+    def test_follow_already_following(self, page):
+        btn = _make_locator()
+        btn.inner_text.return_value = "Following"
+        page.locator.return_value = btn
+        assert follow(page) is False
+
+    def test_follow_not_visible(self, page):
+        btn = _make_locator(visible=False)
+        page.locator.return_value = btn
+        assert follow(page) is False
+
+    def test_follow_exception(self, page):
+        page.locator.side_effect = Exception("fail")
+        assert follow(page) is False
+
+
 # ─── ACTION_REGISTRY ───
 
 
@@ -592,9 +654,10 @@ class TestActionRegistry:
             "post", "navigate", "wait", "tweet", "like", "reply",
             "retweet", "quote", "bookmark", "compose", "cancel_compose",
             "open_tweet", "like_comment", "back", "rest",
+            "open_profile", "follow",
         }
         assert set(ACTION_REGISTRY.keys()) == expected
-        assert len(ACTION_REGISTRY) == 21
+        assert len(ACTION_REGISTRY) == 23
 
     @pytest.mark.parametrize("action_name", [
         "click", "type", "scroll_down", "scroll_up", "scroll",
@@ -602,6 +665,7 @@ class TestActionRegistry:
         "post", "navigate", "wait", "tweet", "like", "reply",
         "retweet", "quote", "bookmark", "compose", "cancel_compose",
         "open_tweet", "like_comment", "back", "rest",
+        "open_profile", "follow",
     ])
     def test_each_action_is_callable(self, action_name):
         handler = ACTION_REGISTRY.get(action_name)
