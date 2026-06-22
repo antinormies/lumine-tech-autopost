@@ -41,6 +41,7 @@ VISION_SYSTEM_INSTRUCTION = (
     "- click_trend(idx) — click a trend name from sidebar or Explore (0=first visible). Use like: click_trend with tweet_index=0\n"
     "- back — go back\n"
     "- click(target) — explore_link, home_link, sidebar_tweet, show_more, or any visible text\n"
+    "- search_topic(text) — search for a topic, interact with results\n"
     "- rest — idle 30-45min on profile\n"
     "- wait(seconds) — pause\n"
     "- cancel_compose — close compose\n"
@@ -61,29 +62,37 @@ VISION_SYSTEM_INSTRUCTION = (
     "- Your PRIMARY job is to explore trending topics and engage with trend posts.\n"
     "- CRITICAL: NEVER click on military or government-related trends. Skip them entirely.\n"
     "- The right sidebar 'What's happening' is algorithmic personalization (not real trends). Use it RARELY.\n"
-    "- ALWAYS use the Explore menu (click(target='explore_link')) for REAL trending topics.\n"
-    "- On Explore page, scroll_down_long through ALL trending topics.\n"
-    "- Pick a trend that matches your interests — avoid military/government at ALL costs.\n"
-    "- click_trend(idx) to open a trending topic (tweet_index in JSON). See posts about it.\n"
-    "- scroll_down through trend results. LIKE + RETWEET + BOOKMARK interesting ones.\n"
-    "- open_tweet(index) to read detail + comments. reply if high relevance.\n"
-    "- open_profile(index) to check the author. follow if interesting.\n"
-    "- back to return. Then next trend.\n"
-    "- REPEAT: explore_link -> scroll trends -> pick one -> click_trend -> engage -> back -> next.\n"
-    "- NEVER use sidebar trends. EVER. They are garbage. Exploring Explore instead.\n\n"
-    "BEHAVIOR:\n"
-    "1. Go to Explore: click(target='explore_link'). See ALL trending topics.\n"
-    "2. scroll_down_long to see the full trend list. Pick one matching interests.\n"
-    "3. click_trend(idx) (tweet_index=N). scroll_down posts. LIKE + RETWEET + QUOTE.\n"
-    "4. QUOTE posts that are highly relevant — add your take/analysis.\n"
-    "5. open_tweet to see details + comments. reply if relevant.\n"
-    "6. open_profile -> follow if interesting.\n"
-    "7. back to return. click_trend another from Explore. Repeat the cycle.\n"
-    "8. Post (tweet) about trends matching interests — finance or random/fun (cooldown applies).\n"
-    "9. Quote(tweet_index, text) is NOT locked by cooldown — use it often on interesting posts.\n"
-    "10. Retweet or tweet something funny/random occasionally.\n"
-    "11. Use 'rest' after ~150 actions to idle 30-45 min. Then start again.\n"
-    "12. NEVER engage same tweet_index twice.\n\n"
+    "- On Explore page there are two tabs: 'For you' (personalized trends) and 'Trending' (real trends).\n"
+    "- click(target='For you') or click(target='Trending') to switch tabs on Explore.\n"
+    "- On each tab: scroll_down_long, pick a trend matching interests, click_trend, engage.\n\n"
+    "BEHAVIOR (follow this priority):\n"
+    "⚠️ WARNING: Scrolling 3+ times without interaction = WASTING your session.\n"
+    "⚠️ WARNING: After 4 total actions, if you haven't visited Explore, you WILL be auto-redirected there.\n\n"
+    "PHASE 1 — HOME FEED (brief warmup, max 3 actions):\n"
+    "1. Scroll a little. Like 1-2 posts. Then IMMEDIATELY go to Explore.\n\n"
+    "PHASE 2 — EXPLORE 'FOR YOU' TAB (main activity):\n"
+    "2. click(target='explore_link') to go to Explore.\n"
+    "3. click(target='For you') to see personalized trends.\n"
+    "4. scroll_down_long through trend list. Pick interest-matching trends.\n"
+    "5. click_trend(N) to open. Scroll posts. LIKE + RETWEET + BOOKMARK + QUOTE.\n"
+    "6. open_tweet -> reply -> like comments. open_profile -> follow.\n"
+    "7. back to Explore. Pick next trend. Repeat.\n"
+    "8. After matching trends exhausted, switch to Trending tab.\n\n"
+    "PHASE 3 — EXPLORE 'TRENDING' TAB:\n"
+    "9. click(target='Trending') for real trending topics.\n"
+    "10. Repeat same cycle: scroll -> pick -> click_trend -> engage -> back -> next.\n"
+    "11. First pick interest-matching trends. Then any specific non-military/govt trend.\n\n"
+    "PHASE 4 — SEARCH (when trends don't match):\n"
+    "12. If no trends match your interests, search_topic('interest keyword').\n"
+    "13. Pick keywords like 'AI', 'stocks', 'tech', 'music', etc.\n"
+    "14. scroll_down_long through results. LIKE + RETWEET + BOOKMARK + QUOTE.\n"
+    "15. open_tweet -> reply -> like comments. open_profile -> follow.\n"
+    "16. Try different search terms to find fresh content.\n\n"
+    "GENERAL RULES:\n"
+    "17. Post about matching trends if cooldown allows.\n"
+    "18. Quote is NOT locked — use it freely.\n"
+    "19. Use 'rest' after ~150 actions. Then restart from Phase 2.\n"
+    "20. NEVER engage same tweet_index twice.\n\n"
     "Respond ONLY JSON:\n"
     '{"action": "...", "reason": "...", "target": "...", "text": "...", "tweet_index": 0, "amount": 600, "seconds": 5}'
 )
@@ -105,6 +114,61 @@ class VisionAgent:
         except Exception:
             return False
 
+    def _page_context(self) -> str:
+        if self._is_compose_open():
+            return "📍 ACTIVE: Post compose dialog"
+
+        try:
+            home_sel = self.page.locator('[data-testid="AppTabBar_Home_Link"][aria-selected="true"]').count() > 0
+            explore_sel = self.page.locator('[data-testid="AppTabBar_Explore_Link"][aria-selected="true"]').count() > 0
+        except Exception:
+            home_sel = False
+            explore_sel = False
+
+        if explore_sel:
+            try:
+                t = self.page.locator('[role="tab"][aria-selected="true"]').inner_text(timeout=1000).lower()
+                if "trending" in t:
+                    return "📍 ACTIVE: Explore > Trending tab"
+                if "for you" in t:
+                    return "📍 ACTIVE: Explore > For You tab"
+            except Exception:
+                pass
+            return "📍 ACTIVE: Explore page"
+
+        if home_sel:
+            try:
+                t = self.page.locator('[role="tab"][aria-selected="true"]').inner_text(timeout=1000).lower()
+                if "for you" in t:
+                    return "📍 ACTIVE: Home > For You tab"
+                if "following" in t:
+                    return "📍 ACTIVE: Home > Following tab"
+            except Exception:
+                pass
+            return "📍 ACTIVE: Home feed"
+
+        url = self._safe_url()
+        if "/status/" in url:
+            return "📍 ACTIVE: Tweet detail"
+        if "/search?" in url:
+            return "📍 ACTIVE: Search / Trend results"
+        if url.startswith("https://x.com/") and url.count("/") == 2:
+            return "📍 ACTIVE: Profile page"
+        if "/home" in url or url in ("https://x.com", "https://twitter.com", ""):
+            return "📍 ACTIVE: Home feed"
+        if "explore" in url:
+            return "📍 ACTIVE: Explore page"
+        return f"📍 ACTIVE: Other ({url.split('/')[-1][:30]})"
+
+    def _scroll_streak(self) -> int:
+        streak = 0
+        for a in reversed(self.memory.actions[-5:]):
+            if a["action"] in ("scroll", "scroll_down", "scroll_down_long"):
+                streak += 1
+            else:
+                break
+        return streak
+
     def _priority_nudge(self, trends_text: str = "") -> str:
         max_eng = config.MAX_ENGAGEMENTS
         eng = self.memory.total_engagements()
@@ -123,6 +187,12 @@ class VisionAgent:
             if (a.get("params") or {}).get("target") == "explore_link"
             or a.get("action") == "navigate" and "explore" in str(a.get("params", {}))
         )
+        tab_clicks = sum(
+            1 for a in self.memory.actions
+            if a["action"] == "click" and (a.get("params") or {}).get("target", "").lower() in ("for you", "trending")
+        )
+        searches = sum(1 for a in self.memory.actions if a["action"] == "search_topic")
+        on_explore = "explore" in self._safe_url()
 
         if self._is_compose_open():
             can_post = self.memory.can_tweet(1.0)
@@ -130,40 +200,60 @@ class VisionAgent:
                 return "COMPOSE OPEN — cancel_compose NOW (post blocked by cooldown)."
             return "COMPOSE OPEN — tweet(text) to post or cancel_compose."
 
+        streak = self._scroll_streak()
+        if streak >= 2:
+            if on_explore:
+                return f"STOP SCROLLING ({streak}x). click_trend(0) NOW."
+            return f"STOP SCROLLING ({streak}x). like(0) or open_tweet(0) NOW."
+
         has_trends = bool(trends_text.strip())
 
-        if explore_visits < 1:
-            return "click(target='explore_link') FIRST — Explore has unfiltered real trends."
+        # Phase 1: Home feed — brief warmup then GO TO EXPLORE
+        if not on_explore:
+            if total < 3:
+                return "scroll_down_long + like posts to warm up."
+            if likes < 2:
+                return "like(0) or open_tweet(0) once, then GO TO EXPLORE."
+            return "DONE WARMING UP. click(target='explore_link') NOW — Explore has real trends."
 
-        if has_trends and explore_visits < 2:
-            return "back to Explore first, scroll_down_long, click_trend there. Sidebar is secondary."
+        # On Explore — Phases 2/3
+        if tab_clicks < 1 and trend_clicks < 1:
+            return "On Explore — click a tab first (click(target='For you') or click(target='Trending'))."
+        if trend_clicks < 1:
+            return "click_trend(0) — stop scrolling, click a trend."
+        if tab_clicks < 2:
+            return "After this trend, click(target='Trending') for real trends."
 
+        # General trend engagement (on any page with visible trends)
         if has_trends:
-            if likes < 4:
+            if likes < 5:
                 return "scroll trend posts -> LIKE + RETWEET + QUOTE."
-            if quotes < 2:
+            if quotes < 3:
                 return "QUOTE a trend post with your take."
-            if retweets < 2:
+            if retweets < 3:
                 return "RETWEET a trend post."
-            if bookmarks < 1:
+            if bookmarks < 2:
                 return "BOOKMARK a trend post."
-            if opened < 2:
+            if opened < 3:
                 return "open_tweet -> read -> reply if relevant -> like comments."
             if profiles < 1:
-                return "open_profile -> follow if interesting -> back to scroll start."
+                return "open_profile -> follow if interesting."
             replies = self.memory.engagement_counts.get("reply", 0)
             if replies < 1:
-                return "reply to a trend post if high relevance. back after."
-            return "back -> click_trend another from Explore. Repeat the cycle."
+                return "reply to a trend post if high relevance."
+            if searches < 2:
+                return "No matching trends left — search_topic('interest keyword')."
+            return "click_trend another from Explore or search again."
 
+        # Fallback engagement nudges (no trends visible)
         if eng < max_eng and total < 5:
             return "scroll_down_long + like to warm up."
         if explore_visits < 1:
-            return "click(target='explore_link') to see ALL trending topics, then pick one."
+            return "click(target='explore_link') to see trends."
         if likes < 3 and eng < max_eng:
             return "Like tweets in feed."
         if quotes < 1 and eng < max_eng:
-            return "QUOTE a post that interests you."
+            return "QUOTE a post."
         if retweets < 1 and eng < max_eng:
             return "Retweet something."
         if opened < 2 and eng < max_eng:
@@ -176,6 +266,8 @@ class VisionAgent:
             return "STOP clicking. Scroll and like instead."
         if eng < max_eng and total > 6:
             return "Click Explore or sidebar trends."
+        if searches < 1 and total > 10:
+            return "search_topic('something interesting') for fresh content."
         return ""
 
     def _extract_trends(self) -> str:
@@ -234,11 +326,20 @@ class VisionAgent:
 
         trends_text = self._extract_trends()
         compose_open = self._is_compose_open()
+        page_ctx = self._page_context()
+
+        recent_fails = [a for a in self.memory.actions[-5:] if not a.get("success")]
+        fail_summary = ""
+        if recent_fails:
+            fail_summary = " Recent FAILURES: " + ", ".join(
+                f"{a['action']} idx={a.get('params', {}).get('tweet_index', '?')}" for a in recent_fails
+            ) + "\n"
 
         if compose_open:
             can_post = self.memory.can_tweet(1.0)
             if not can_post:
                 user_text = (
+                    f"{page_ctx}\n"
                     f"Compose dialog is OPEN but post is on cooldown. URL: {url}\n"
                     f"{last_result}"
                     f"You cannot tweet right now. ONLY action: cancel_compose.\n"
@@ -246,6 +347,7 @@ class VisionAgent:
                 )
             else:
                 user_text = (
+                    f"{page_ctx}\n"
                     f"Compose dialog is OPEN. URL: {url}\n"
                     f"{last_result}"
                     f"Compose open — tweet(text) to post or cancel_compose to close.\n"
@@ -261,40 +363,64 @@ class VisionAgent:
                 remaining_m = max(1, 60 - elapsed_m)
                 cooldown_text = f" Post cooldown: {remaining_m}min left. Do NOT tweet/compose."
 
-            used_reply = self.memory.used_indices("reply")
-            used_like = self.memory.used_indices("like")
-            dup_guard = ""
-            if used_reply:
-                dup_guard += f" Already replied to indices: {sorted(used_reply)}."
-            if used_like:
-                dup_guard += f" Already liked indices: {sorted(used_like)}."
+        used_reply = self.memory.used_indices("reply")
+        used_like = self.memory.used_indices("like")
+        used_retweet = self.memory.used_indices("retweet")
+        used_bookmark = self.memory.used_indices("bookmark")
+        used_quote = self.memory.used_indices("quote")
 
-            nudge = self._priority_nudge(trends_text)
-            if nudge:
-                nudge = f" >>> {nudge}"
+        dup_guard = ""
+        all_used: set[int] = set()
+        for action_name, used_set in ("like", used_like), ("retweet", used_retweet), ("reply", used_reply), ("bookmark", used_bookmark), ("quote", used_quote):
+            if used_set:
+                sorted_used = sorted(used_set)
+                dup_guard += f" Used({action_name}): {sorted_used}."
+                all_used.update(used_set)
 
-            user_text = (
-                f"I'm on Twitter. URL: {url}\n"
-                f"{last_result}"
-                f"Engagements: {eng}/{max_eng} | Last: {', '.join(last_3)}\n"
-                f"{trends_text}"
-                f"{cooldown_text}"
-                f"{dup_guard}"
-                f"{nudge}"
-            )
+        if dup_guard:
+            try:
+                tweet_count = len(self.page.locator(SELECTORS["tweet_article"]).all())
+            except Exception:
+                tweet_count = 10
+            free = [i for i in range(min(tweet_count, 10)) if i not in all_used]
+            if free:
+                dup_guard += f" Free indices: {free[:5]}. Try one of those."
+            else:
+                dup_guard += " All indices used. Scroll down for fresh tweets."
 
-        response = self.llm.vision_chat(
-            system_prompt=self.full_prompt,
-            user_text=user_text,
-            image=screenshot,
-            temperature=0.8,
-            max_tokens=512,
+        nudge = self._priority_nudge(trends_text)
+        if nudge:
+            nudge = f" >>> {nudge}"
+
+        user_text = (
+            f"{page_ctx}\n"
+            f"I'm on Twitter. URL: {url}\n"
+            f"{last_result}"
+            f"{fail_summary}"
+            f"Engagements: {eng}/{max_eng} | Last: {', '.join(last_3)}\n"
+            f"{trends_text}"
+            f"{cooldown_text}"
+            f"{dup_guard}"
+            f"{nudge}"
         )
 
-        if not response:
-            return None
+        for attempt in range(2):
+            response = self.llm.vision_chat(
+                system_prompt=self.full_prompt,
+                user_text=user_text,
+                image=screenshot,
+                temperature=0.8,
+                max_tokens=512,
+            )
+            if not response:
+                return None
+            parsed = self._parse_action(response.content)
+            if parsed:
+                return parsed
+            if attempt == 0:
+                user_text += "\nYou gave invalid JSON. Fix the formatting — valid JSON only."
 
-        return self._parse_action(response.content)
+        return None
 
     def _parse_action(self, text: str) -> Optional[dict]:
         decoder = json.JSONDecoder()
@@ -321,6 +447,12 @@ class VisionAgent:
         except Exception:
             return False
 
+    def _safe_url(self) -> str:
+        try:
+            return self.page.evaluate("window.location.href").lower()
+        except Exception:
+            return ""
+
     def run_step(self) -> bool:
         if not self._page_alive():
             logger.warning("Page is no longer alive, stopping")
@@ -346,18 +478,27 @@ class VisionAgent:
             logger.info(f"Agent done: {decision.get('reason', '')}")
             return False
 
-        target = str(decision.get("target", ""))
-        if action == "click" and target.strip().lower() in ("click_trend", "click_trend(index)", "click_trend(idx)"):
+        target = str(decision.get("target", "")).strip().lower()
+        if action == "click" and "click_trend" in target:
             idx = decision.get("tweet_index", 0)
-            logger.info(f"Normalized click(target={target}) -> click_trend with tweet_index={idx}")
-            decision["action"] = "click_trend"
-            decision["tweet_index"] = idx
-            decision.pop("target", None)
-        elif action in ("click_trend", "click_trend(index)", "click_trend(idx)"):
+            logger.info(f"Normalized click(target={target}) -> explore_link (LLM meant 'go to Explore')")
+            decision["target"] = "explore_link"
+        elif "click_trend" in action:
             idx = decision.get("tweet_index", 0)
             logger.info(f"Normalized {action} -> click_trend with tweet_index={idx}")
             decision["action"] = "click_trend"
             decision["tweet_index"] = idx
+
+        url_lower = self._safe_url()
+        if action == "click":
+            target = str(decision.get("target", "")).strip().lower()
+            if target in ("trending", "for you") and "explore" not in url_lower:
+                logger.info(f"Normalized click({target}) -> explore_link (not on Explore)")
+                decision["target"] = "explore_link"
+            elif target in ("trending", "for you") and "explore" in url_lower:
+                logger.info(f"On Explore — keeping click({target}) for tab")
+
+        action = decision["action"]  # re-sync after normalizations
 
         params = {k: v for k, v in decision.items() if k not in ("action", "reason")}
 
@@ -386,7 +527,45 @@ class VisionAgent:
                     self.memory.record_action("cancel_compose", {}, "auto-escape compose loop", True)
                     return True
                 return True
-            self._compose_streak = 0
+        self._compose_streak = 0
+
+        FORCE_AFTER = 2
+        explore_visits = sum(
+            1 for a in self.memory.actions
+            if (a.get("params") or {}).get("target") == "explore_link"
+            or a.get("action") == "navigate" and "explore" in str(a.get("params", {}))
+        )
+        if explore_visits < 1 and len(self.memory.actions) >= FORCE_AFTER:
+            logger.info(f"Blocked {action} — haven't visited Explore after {len(self.memory.actions)} actions. Force-navigating.")
+            self.memory.record_action(action, params, decision.get("reason", ""), False)
+            execute_action(self.page, "click", {"target": "explore_link"})
+            self.memory.record_action("click", {"target": "explore_link"}, "auto-navigate to Explore", True)
+            return True
+
+        SCROLL_ACTIONS = {"scroll", "scroll_down", "scroll_down_long", "scroll_up"}
+        trend_clicks = sum(1 for a in self.memory.actions if a["action"] == "click_trend")
+        trending_visits = sum(
+            1 for a in self.memory.actions
+            if a["action"] == "click" and (a.get("params") or {}).get("target", "").lower() == "trending"
+        )
+        if "explore" in self._safe_url() and trend_clicks >= 2 and trending_visits < 1:
+            logger.info("Blocked — trend engagement done but never clicked Trending tab. Force-switching.")
+            self.memory.record_action(action, params, decision.get("reason", ""), False)
+            execute_action(self.page, "click", {"target": "Trending"})
+            self.memory.record_action("click", {"target": "Trending"}, "auto-switch to Trending tab", True)
+            return True
+
+        if action in SCROLL_ACTIONS and self._scroll_streak() >= 3:
+            logger.info(f"Blocked scroll — streak={self._scroll_streak()}, forcing engagement")
+            self.memory.record_action(action, params, decision.get("reason", ""), False)
+            return True
+
+        if action in SCROLL_ACTIONS and "explore" in self._safe_url() and trend_clicks < 1:
+            logger.info("Blocked scroll on Explore — no trend clicked yet. Must click_trend first.")
+            self.memory.record_action(action, params, decision.get("reason", ""), False)
+            return True
+            self.memory.record_action(action, params, decision.get("reason", ""), False)
+            return True
 
         POST_ACTIONS = {"tweet", "compose", "post"}
         if action in POST_ACTIONS and not self.memory.can_tweet(1.0):
@@ -400,6 +579,11 @@ class VisionAgent:
             if self.memory.is_duplicate(action, int(tweet_idx), DUPE_TIMEOUT):
                 logger.info(f"Blocked duplicate {action} on tweet_index={tweet_idx} (still in {DUPE_TIMEOUT}s timeout)")
                 self.memory.record_action(action, params, decision.get("reason", ""), False)
+                recent = [a for a in self.memory.actions[-5:] if a["action"] in DUPE_CHECKED and not a.get("success")]
+                if len(recent) >= 2:
+                    logger.info("Duplicate streak — forcing redirect to break loop")
+                    execute_action(self.page, "click", {"target": "explore_link"})
+                    self.memory.record_action("click", {"target": "explore_link"}, "auto-escape dupe loop", True)
                 return True
 
         success = execute_action(self.page, action, params)

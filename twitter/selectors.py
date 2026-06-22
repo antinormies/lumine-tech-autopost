@@ -17,12 +17,13 @@ VISIBLE_TEXT_MAP: dict[str, str] = {
     "retweet": "retweet_button",
     "Bookmark": "bookmark_button",
     "bookmark": "bookmark_button",
-    "Trending": "explore_link",
-    "trending": "explore_link",
+    "Trending": "trending_tab",
+    "trending": "trending_tab",
+    "click_trend": "explore_link",
+    "click_trend(idx)": "explore_link",
+    "click_trend(index)": "explore_link",
     "Trend": "explore_link",
     "trend": "explore_link",
-    "For you": "home_link",
-    "for you": "home_link",
     "Following": "home_link",
     "following": "home_link",
 }
@@ -86,6 +87,8 @@ SELECTORS = {
     # Trends
     "trend_item": '[data-testid="trend"]',
     "explore_trends": '//span[contains(text(), "Trends")]',
+    "trending_tab": '[role="tablist"] [role="tab"]:has-text("Trending")',
+    "for_you_tab": '[role="tablist"] [role="tab"]:has-text("For you")',
     "show_more": '//span[contains(text(), "Show more")]',
 }
 

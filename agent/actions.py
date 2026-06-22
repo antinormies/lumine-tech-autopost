@@ -427,12 +427,36 @@ def scroll_down_long(page: Page, amount: int = 2500) -> bool:
         for i in range(steps):
             step_px = random.randint(400, 900)
             page.mouse.wheel(0, step_px)
-            time.sleep(1)
+            time.sleep(random.uniform(1, 5))
         logger.info(f"Scrolled down long in {steps} steps")
         time.sleep(random.uniform(1, 2.5))
         return True
     except Exception as e:
         logger.warning(f"Long scroll down failed: {e}")
+        return False
+
+
+def search_topic(page: Page, query: str) -> bool:
+    if not query:
+        logger.warning("No search query provided")
+        return False
+    try:
+        search_input = page.locator(SELECTORS["search_box"])
+        if search_input.count() == 0:
+            logger.warning("Search box not found")
+            return False
+        _jitter_mouse(page)
+        search_input.first.click(force=True, timeout=5000)
+        time.sleep(random.uniform(0.5, 1.5))
+        search_input.first.fill("")
+        page.keyboard.type(query, delay=random.randint(30, 80))
+        time.sleep(random.uniform(0.5, 1))
+        page.keyboard.press("Enter")
+        logger.info(f"Searched for: {query}")
+        time.sleep(random.uniform(2, 4))
+        return True
+    except Exception as e:
+        logger.warning(f"Search failed: {e}")
         return False
 
 
@@ -460,6 +484,7 @@ ACTION_REGISTRY = {
     "back": lambda page, params: go_back(page),
     "follow": lambda page, params: follow(page),
     "click_trend": lambda page, params: click_trend(page, params.get("tweet_index", 0)),
+    "search_topic": lambda page, params: search_topic(page, params.get("text", "")),
     "rest": lambda page, params: rest(page),
 }
 

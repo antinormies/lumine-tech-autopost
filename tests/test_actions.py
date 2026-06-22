@@ -709,10 +709,10 @@ class TestActionRegistry:
             "post", "navigate", "wait", "tweet", "like", "reply",
             "retweet", "quote", "bookmark", "compose", "cancel_compose",
             "open_tweet", "like_comment", "back", "rest",
-            "open_profile", "follow", "click_trend",
+            "open_profile", "follow", "click_trend", "search_topic",
         }
         assert set(ACTION_REGISTRY.keys()) == expected
-        assert len(ACTION_REGISTRY) == 24
+        assert len(ACTION_REGISTRY) == 25
 
     @pytest.mark.parametrize("action_name", [
         "click", "type", "scroll_down", "scroll_up", "scroll",
@@ -720,7 +720,7 @@ class TestActionRegistry:
         "post", "navigate", "wait", "tweet", "like", "reply",
         "retweet", "quote", "bookmark", "compose", "cancel_compose",
         "open_tweet", "like_comment", "back", "rest",
-        "open_profile", "follow", "click_trend",
+        "open_profile", "follow", "click_trend", "search_topic",
     ])
     def test_each_action_is_callable(self, action_name):
         handler = ACTION_REGISTRY.get(action_name)
