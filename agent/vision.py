@@ -1,4 +1,5 @@
 import json
+import random
 import re
 import time
 from typing import Optional
@@ -7,6 +8,13 @@ from PIL import Image
 from playwright.sync_api import Page
 
 from agent.actions import execute_action
+
+MILITARY_GOVT_KEYWORDS = {
+    "militer", "tentara", "angkatan bersenjata", "polisi", "tni", "polri",
+    "pemerintah", "politik", "presiden", "menteri", "kementerian", "dpr", "mpr",
+    "army", "military", "government", "politics", "president", "minister",
+    "soldier", "war", "senjata", "nuklir", "rudal", "perang", "prajurit",
+}
 from brain.memory import Memory
 from config import config
 from llm.client import LLMClient
@@ -16,7 +24,7 @@ from utils.helpers import random_delay
 
 
 VISION_SYSTEM_INSTRUCTION = (
-    "You are an Investor or Finance Advisor on Twitter. You see a screenshot.\n\n"
+    "You are an Investor or Finance Advisor with a sense of humor. You see a screenshot.\n\n"
     "ACTIONS:\n"
     "- scroll_down/scroll — scroll feed (do this a lot)\n"
     "- scroll_down_long — scroll far down\n"
@@ -30,42 +38,52 @@ VISION_SYSTEM_INSTRUCTION = (
     "- bookmark(tweet_index) — save for later\n"
     "- open_profile(tweet_index) — click user name to see their profile\n"
     "- follow — click Follow button on a profile page\n"
-    "- click_trend(index) — click a trend name from sidebar or Explore (0=first visible)\n"
+    "- click_trend(idx) — click a trend name from sidebar or Explore (0=first visible). Use like: click_trend with tweet_index=0\n"
     "- back — go back\n"
     "- click(target) — explore_link, home_link, sidebar_tweet, show_more, or any visible text\n"
-    "- rest — idle 45-120min on profile\n"
+    "- rest — idle 30-45min on profile\n"
     "- wait(seconds) — pause\n"
     "- cancel_compose — close compose\n"
     "- done(reason) — end session\n\n"
     "WRITING RULES:\n"
-    "- Write as an Investor or Finance Advisor. Share analysis, opinions, and insights.\n"
+    "- Mix finance analysis with humor, wit, and relatable takes.\n"
+    "- Retweet or tweet something random and fun, not just finance.\n"
     "- NEVER say you are a bot, AI, or automated system. Never reveal your true nature.\n"
     "- NEVER use hashtags (#) or @mentions. Write naturally like a human.\n"
-    "- Keep posts relevant to finance, markets, trading, or investing.\n\n"
+    "- AVOID topics related to military or government/politics.\n\n"
     "POST COOLDOWN:\n"
-    "1. Max 1 post per hour.\n"
-    "2. If you already posted recently, do NOT post again.\n"
-    "3. Instead scroll, like, retweet, or rest.\n\n"
+    "1. Max 1 post per hour (tweet/compose).\n"
+    "2. Quote (retweet with comment) is NOT locked — use it freely on relevant posts.\n"
+    "3. If you already tweeted recently, you can still quote or reply.\n\n"
     "COMPOSE RULE:\n"
     "- If compose dialog is open: ONLY tweet/compose or cancel_compose allowed.\n\n"
     "TRENDS (your MAIN activity):\n"
-    "- Your PRIMARY job is to explore trends and engage with trend posts.\n"
-    "- Check 'What\\'s happening' sidebar. click_trend(index) to open a trend.\n"
-    "- Go to Explore (explore_link) for the full trend list.\n"
-    "- Click 'show_more' on sidebar with click(target='show_more').\n"
-    "- REPEAT: click_trend(index) -> like/retweet/bookmark posts -> back -> next trend.\n\n"
+    "- Your PRIMARY job is to explore trending topics and engage with trend posts.\n"
+    "- CRITICAL: NEVER click on military or government-related trends. Skip them entirely.\n"
+    "- The right sidebar 'What's happening' is algorithmic personalization (not real trends). Use it RARELY.\n"
+    "- ALWAYS use the Explore menu (click(target='explore_link')) for REAL trending topics.\n"
+    "- On Explore page, scroll_down_long through ALL trending topics.\n"
+    "- Pick a trend that matches your interests — avoid military/government at ALL costs.\n"
+    "- click_trend(idx) to open a trending topic (tweet_index in JSON). See posts about it.\n"
+    "- scroll_down through trend results. LIKE + RETWEET + BOOKMARK interesting ones.\n"
+    "- open_tweet(index) to read detail + comments. reply if high relevance.\n"
+    "- open_profile(index) to check the author. follow if interesting.\n"
+    "- back to return. Then next trend.\n"
+    "- REPEAT: explore_link -> scroll trends -> pick one -> click_trend -> engage -> back -> next.\n"
+    "- NEVER use sidebar trends. EVER. They are garbage. Exploring Explore instead.\n\n"
     "BEHAVIOR:\n"
-    "1. scroll_down_long to load posts. LIKE + RETWEET + BOOKMARK as you scroll.\n"
-    "2. Check sidebar trends. click_trend to open one. LIKE + RETWEET posts about it.\n"
-    "3. scroll_down_long more trend posts. Like + retweet more.\n"
-    "4. Open a trend post (open_tweet). Like comments.\n"
-    "5. Open profile (open_profile). Follow if interesting.\n"
-    "6. back. click_trend another. Repeat the cycle.\n"
-    "7. After 3-4 trends, scroll home feed a bit. LIKE posts there too.\n"
-    "8. Go to Explore (explore_link). Click trends there. Like/retweet more.\n"
-    "9. Post about a trend matching your finance interests (if cooldown passed).\n"
-    "10. Use 'rest' after 10-15 actions. Then start again.\n"
-    "11. NEVER engage same tweet_index twice.\n\n"
+    "1. Go to Explore: click(target='explore_link'). See ALL trending topics.\n"
+    "2. scroll_down_long to see the full trend list. Pick one matching interests.\n"
+    "3. click_trend(idx) (tweet_index=N). scroll_down posts. LIKE + RETWEET + QUOTE.\n"
+    "4. QUOTE posts that are highly relevant — add your take/analysis.\n"
+    "5. open_tweet to see details + comments. reply if relevant.\n"
+    "6. open_profile -> follow if interesting.\n"
+    "7. back to return. click_trend another from Explore. Repeat the cycle.\n"
+    "8. Post (tweet) about trends matching interests — finance or random/fun (cooldown applies).\n"
+    "9. Quote(tweet_index, text) is NOT locked by cooldown — use it often on interesting posts.\n"
+    "10. Retweet or tweet something funny/random occasionally.\n"
+    "11. Use 'rest' after ~150 actions to idle 30-45 min. Then start again.\n"
+    "12. NEVER engage same tweet_index twice.\n\n"
     "Respond ONLY JSON:\n"
     '{"action": "...", "reason": "...", "target": "...", "text": "...", "tweet_index": 0, "amount": 600, "seconds": 5}'
 )
@@ -93,12 +111,18 @@ class VisionAgent:
         total = len(self.memory.actions)
         likes = self.memory.engagement_counts.get("like", 0)
         retweets = self.memory.engagement_counts.get("retweet", 0)
+        quotes = self.memory.engagement_counts.get("quote", 0)
         bookmarks = self.memory.engagement_counts.get("bookmark", 0)
         follows = self.memory.engagement_counts.get("follow", 0)
         opened = sum(1 for a in self.memory.actions if a["action"] == "open_tweet")
         profiles = sum(1 for a in self.memory.actions if a["action"] == "open_profile")
         recent_fails = sum(1 for a in self.memory.actions[-4:] if not a.get("success"))
         trend_clicks = sum(1 for a in self.memory.actions if a["action"] == "click_trend")
+        explore_visits = sum(
+            1 for a in self.memory.actions
+            if (a.get("params") or {}).get("target") == "explore_link"
+            or a.get("action") == "navigate" and "explore" in str(a.get("params", {}))
+        )
 
         if self._is_compose_open():
             can_post = self.memory.can_tweet(1.0)
@@ -108,24 +132,38 @@ class VisionAgent:
 
         has_trends = bool(trends_text.strip())
 
-        if has_trends and trend_clicks < 1:
-            return "click_trend(0) to see trend posts, then like/retweet."
+        if explore_visits < 1:
+            return "click(target='explore_link') FIRST — Explore has unfiltered real trends."
+
+        if has_trends and explore_visits < 2:
+            return "back to Explore first, scroll_down_long, click_trend there. Sidebar is secondary."
 
         if has_trends:
             if likes < 4:
-                return "LIKE and RETWEET trend posts NOW."
+                return "scroll trend posts -> LIKE + RETWEET + QUOTE."
+            if quotes < 2:
+                return "QUOTE a trend post with your take."
             if retweets < 2:
                 return "RETWEET a trend post."
             if bookmarks < 1:
                 return "BOOKMARK a trend post."
             if opened < 2:
-                return "open_tweet and like comments."
-            return "click_trend another, like/retweet more."
+                return "open_tweet -> read -> reply if relevant -> like comments."
+            if profiles < 1:
+                return "open_profile -> follow if interesting -> back to scroll start."
+            replies = self.memory.engagement_counts.get("reply", 0)
+            if replies < 1:
+                return "reply to a trend post if high relevance. back after."
+            return "back -> click_trend another from Explore. Repeat the cycle."
 
         if eng < max_eng and total < 5:
             return "scroll_down_long + like to warm up."
+        if explore_visits < 1:
+            return "click(target='explore_link') to see ALL trending topics, then pick one."
         if likes < 3 and eng < max_eng:
             return "Like tweets in feed."
+        if quotes < 1 and eng < max_eng:
+            return "QUOTE a post that interests you."
         if retweets < 1 and eng < max_eng:
             return "Retweet something."
         if opened < 2 and eng < max_eng:
@@ -144,20 +182,25 @@ class VisionAgent:
         try:
             trend_cells = self.page.locator(SELECTORS["trend_item"]).all()
             if not trend_cells:
+                self._trend_texts = []
                 return ""
-            texts = []
+            all_texts = []
             for t in trend_cells[:10]:
                 try:
                     txt = t.inner_text(timeout=2000)
                     if txt.strip():
-                        texts.append(txt.strip())
+                        all_texts.append(txt.strip())
                 except Exception:
                     continue
-            if texts:
-                trends = "; ".join(texts[:8])
-                logger.info(f"Extracted trends: {trends[:100]}...")
-                return f"Trending now: {trends}\n"
+            self._trend_texts = all_texts.copy()
+            filtered = [t for t in all_texts if not any(kw.lower() in t.lower() for kw in MILITARY_GOVT_KEYWORDS)]
+            if not filtered:
+                return "(only military/govt trends — skip)"
+            trends = "; ".join(filtered[:8])
+            logger.info(f"Filtered trends (excl military/govt): {trends[:120]}...")
+            return f"Trending now: {trends}\n"
         except Exception:
+            self._trend_texts = []
             pass
         return ""
 
@@ -303,6 +346,19 @@ class VisionAgent:
             logger.info(f"Agent done: {decision.get('reason', '')}")
             return False
 
+        target = str(decision.get("target", ""))
+        if action == "click" and target.strip().lower() in ("click_trend", "click_trend(index)", "click_trend(idx)"):
+            idx = decision.get("tweet_index", 0)
+            logger.info(f"Normalized click(target={target}) -> click_trend with tweet_index={idx}")
+            decision["action"] = "click_trend"
+            decision["tweet_index"] = idx
+            decision.pop("target", None)
+        elif action in ("click_trend", "click_trend(index)", "click_trend(idx)"):
+            idx = decision.get("tweet_index", 0)
+            logger.info(f"Normalized {action} -> click_trend with tweet_index={idx}")
+            decision["action"] = "click_trend"
+            decision["tweet_index"] = idx
+
         params = {k: v for k, v in decision.items() if k not in ("action", "reason")}
 
         INDEXED_ACTIONS = {"like", "reply", "retweet", "quote", "bookmark", "open_tweet", "like_comment", "open_profile"}
@@ -326,7 +382,6 @@ class VisionAgent:
                 self.memory.record_action(action, params, decision.get("reason", ""), False)
                 if self._compose_streak >= 2:
                     logger.info(f"Auto-cancelling compose after {self._compose_streak} blocked actions")
-                    self._compose_streak = 0
                     execute_action(self.page, "cancel_compose", {})
                     self.memory.record_action("cancel_compose", {}, "auto-escape compose loop", True)
                     return True
@@ -339,11 +394,11 @@ class VisionAgent:
             self.memory.record_action(action, params, decision.get("reason", ""), False)
             return True
 
+        DUPE_TIMEOUT = random.randint(180, 900)  # 3-15 min
         DUPE_CHECKED = {"reply", "like", "retweet", "quote", "bookmark"}
         if action in DUPE_CHECKED and tweet_idx is not None:
-            used = self.memory.used_indices(action)
-            if int(tweet_idx) in used:
-                logger.info(f"Blocked duplicate {action} on tweet_index={tweet_idx}")
+            if self.memory.is_duplicate(action, int(tweet_idx), DUPE_TIMEOUT):
+                logger.info(f"Blocked duplicate {action} on tweet_index={tweet_idx} (still in {DUPE_TIMEOUT}s timeout)")
                 self.memory.record_action(action, params, decision.get("reason", ""), False)
                 return True
 
@@ -371,6 +426,12 @@ class VisionAgent:
         step = 0
         while step < max_steps:
             logger.info(f"--- Step {step + 1}/{max_steps} ---")
+
+            if step > 0 and step % 150 == 0:
+                logger.info(f"Reached {step} steps — resting for 30-45 min")
+                execute_action(self.page, "rest", {})
+                time.sleep(2)
+
             should_continue = self.run_step()
             if not should_continue:
                 break

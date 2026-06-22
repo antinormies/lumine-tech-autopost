@@ -24,6 +24,7 @@ class Memory:
             "params": params,
             "reason": reason,
             "success": success,
+            "timestamp": time.time(),
         }
         self.actions.append(entry)
         if action in POST_ACTIONS and success:
@@ -66,6 +67,18 @@ class Memory:
                 if idx is not None:
                     indices.add(int(idx))
         return indices
+
+    def is_duplicate(self, action: str, tweet_index: int, timeout: float = 300) -> bool:
+        cutoff = time.time() - timeout
+        for a in reversed(self.actions):
+            if a["action"] == action and a.get("success"):
+                idx = (a.get("params") or {}).get("tweet_index")
+                if idx is not None and int(idx) == tweet_index:
+                    ts = a.get("timestamp", 0)
+                    if ts > cutoff:
+                        return True
+                    break
+        return False
 
     def _load(self):
         try:
