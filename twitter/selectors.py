@@ -17,13 +17,9 @@ VISIBLE_TEXT_MAP: dict[str, str] = {
     "retweet": "retweet_button",
     "Bookmark": "bookmark_button",
     "bookmark": "bookmark_button",
-    "Trending": "trending_tab",
-    "trending": "trending_tab",
     "click_trend": "explore_link",
     "click_trend(idx)": "explore_link",
     "click_trend(index)": "explore_link",
-    "Trend": "explore_link",
-    "trend": "explore_link",
     "Following": "home_link",
     "following": "home_link",
 }
