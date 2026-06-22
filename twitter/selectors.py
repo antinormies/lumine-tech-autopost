@@ -79,9 +79,14 @@ SELECTORS = {
     # Compose dialog
     "cancel_compose": '[data-testid="app-bar-close"]',
     "compose_close": '[data-testid="close"]',
+    # Profile
+    "follow_button": '[data-testid="followButton"]',
+    "unfollow_button": '[data-testid="unfollowButton"]',
+    "user_name_link": '[data-testid="User-Name"]',
     # Trends
     "trend_item": '[data-testid="trend"]',
     "explore_trends": '//span[contains(text(), "Trends")]',
+    "show_more": '//span[contains(text(), "Show more")]',
 }
 
 ELEMENT_DESCRIPTIONS = {
@@ -97,4 +102,6 @@ ELEMENT_DESCRIPTIONS = {
     "cancel_compose": "the close/cancel button on the compose dialog",
     "tweet_article": "a tweet to open and view details",
     "trend_item": "a trending topic",
+    "follow_button": "the follow button",
+    "user_name_link": "the tweet author name",
 }

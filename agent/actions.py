@@ -29,7 +29,7 @@ def _jitter_mouse(page: Page):
         pass
 
 
-BLOCKED_CLICKS = {"follow", "following", "unfollow", "like", "direct_message", "send"}
+BLOCKED_CLICKS = {"unfollow", "like", "direct_message", "send"}
 
 
 def click(page: Page, target: str) -> bool:
@@ -84,14 +84,12 @@ def type_text(page: Page, target: str, text: str) -> bool:
 
 
 def scroll_down(page: Page, amount: int = 600) -> bool:
-    amount = random.randint(300, 800)
-    steps = random.randint(3, 8)
-    per_step = amount // steps
+    steps = random.randint(2, 4)
     try:
         for _ in range(steps):
-            page.evaluate(f"window.scrollBy(0, {per_step})")
-            time.sleep(random.uniform(0.05, 0.3))
-        logger.info(f"Scrolled down ~{amount}px")
+            page.mouse.wheel(0, random.randint(150, 350))
+            time.sleep(1)
+        logger.info(f"Scrolled down in {steps} steps")
         time.sleep(random.uniform(0.5, 2))
         return True
     except Exception as e:
@@ -100,14 +98,12 @@ def scroll_down(page: Page, amount: int = 600) -> bool:
 
 
 def scroll_up(page: Page, amount: int = 600) -> bool:
-    amount = random.randint(100, 400)
-    steps = random.randint(2, 5)
-    per_step = amount // steps
+    steps = random.randint(2, 4)
     try:
         for _ in range(steps):
-            page.evaluate(f"window.scrollBy(0, -{per_step})")
-            time.sleep(random.uniform(0.05, 0.2))
-        logger.info(f"Scrolled up ~{amount}px")
+            page.mouse.wheel(0, random.randint(-350, -150))
+            time.sleep(1)
+        logger.info(f"Scrolled up in {steps} steps")
         time.sleep(random.uniform(0.3, 1))
         return True
     except Exception as e:
@@ -313,6 +309,47 @@ def like_comment(page: Page, index: int = 0) -> bool:
     return False
 
 
+def open_profile(page: Page, index: int = 0) -> bool:
+    tweets = page.locator(SELECTORS["tweet_article"]).all()
+    if index >= len(tweets):
+        logger.warning(f"Tweet index {index} out of range ({len(tweets)} tweets)")
+        return False
+    try:
+        _jitter_mouse(page)
+        user_link = tweets[index].locator(SELECTORS["user_name_link"])
+        user_link.scroll_into_view_if_needed(timeout=3000)
+        time.sleep(random.uniform(0.3, 1))
+        user_link.click(force=True, timeout=5000)
+        logger.info(f"Opened profile from tweet #{index}")
+        time.sleep(random.uniform(1.5, 3))
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to open profile from tweet #{index}: {e}")
+        return False
+
+
+def follow(page: Page) -> bool:
+    try:
+        follow_btn = page.locator(SELECTORS["follow_button"])
+        if not follow_btn.is_visible(timeout=3000):
+            logger.warning("Follow button not visible")
+            return False
+        text = follow_btn.inner_text(timeout=1000).strip().lower()
+        if text in ("following",):
+            logger.info("Already following this account")
+            return False
+        _jitter_mouse(page)
+        follow_btn.scroll_into_view_if_needed(timeout=3000)
+        time.sleep(random.uniform(0.3, 1))
+        follow_btn.click(force=True, timeout=5000)
+        logger.info("Clicked follow button")
+        time.sleep(random.uniform(1, 2))
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to follow: {e}")
+        return False
+
+
 def go_back(page: Page) -> bool:
     try:
         page.go_back(wait_until="domcontentloaded")
@@ -329,12 +366,18 @@ def cancel_compose(page: Page) -> bool:
         close_btn = page.locator('[data-testid="app-bar-close"]')
         if close_btn.is_visible(timeout=2000):
             close_btn.click()
-            logger.info("Closed compose dialog")
-            time.sleep(1)
-            return True
+            time.sleep(1.5)
+            if not page.locator('[data-testid="sheetDialog"]').is_visible(timeout=2000):
+                logger.info("Closed compose dialog")
+                return True
+            logger.warning("Close button clicked but compose still visible — trying Escape")
         page.keyboard.press("Escape")
-        time.sleep(1)
-        return True
+        time.sleep(1.5)
+        if not page.locator('[data-testid="sheetDialog"]').is_visible(timeout=2000):
+            logger.info("Closed compose via Escape")
+            return True
+        logger.warning("Cancel compose failed — dialog persists")
+        return False
     except Exception as e:
         logger.warning(f"Failed to close compose: {e}")
         return False
@@ -355,15 +398,37 @@ def rest(page: Page) -> bool:
         return False
 
 
-def scroll_down_long(page: Page, amount: int = 2500) -> bool:
-    amount = random.randint(2000, 5000)
-    steps = random.randint(8, 15)
-    per_step = amount // steps
+def click_trend(page: Page, index: int = 0) -> bool:
+    trends = page.locator(SELECTORS["trend_item"]).all()
+    if index >= len(trends):
+        logger.warning(f"Trend index {index} out of range ({len(trends)} trends)")
+        return False
     try:
-        for _ in range(steps):
-            page.evaluate(f"window.scrollBy(0, {per_step})")
-            time.sleep(random.uniform(0.08, 0.3))
-        logger.info(f"Scrolled down long ~{amount}px")
+        _jitter_mouse(page)
+        cell = trends[index]
+        cell.scroll_into_view_if_needed(timeout=3000)
+        time.sleep(random.uniform(0.3, 1))
+        link = cell.locator('a, [role="link"]')
+        if link.count() > 0:
+            link.first.click(force=True, timeout=5000)
+        else:
+            cell.click(force=True, timeout=5000)
+        logger.info(f"Clicked trend #{index}")
+        time.sleep(random.uniform(1.5, 3))
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to click trend #{index}: {e}")
+        return False
+
+
+def scroll_down_long(page: Page, amount: int = 2500) -> bool:
+    steps = random.randint(3, 6)
+    try:
+        for i in range(steps):
+            step_px = random.randint(400, 900)
+            page.mouse.wheel(0, step_px)
+            time.sleep(1)
+        logger.info(f"Scrolled down long in {steps} steps")
         time.sleep(random.uniform(1, 2.5))
         return True
     except Exception as e:
@@ -391,7 +456,10 @@ ACTION_REGISTRY = {
     "cancel_compose": lambda page, params: cancel_compose(page),
     "open_tweet": lambda page, params: open_tweet(page, params.get("tweet_index", 0)),
     "like_comment": lambda page, params: like_comment(page, params.get("tweet_index", 0)),
+    "open_profile": lambda page, params: open_profile(page, params.get("tweet_index", 0)),
     "back": lambda page, params: go_back(page),
+    "follow": lambda page, params: follow(page),
+    "click_trend": lambda page, params: click_trend(page, params.get("tweet_index", 0)),
     "rest": lambda page, params: rest(page),
 }
 

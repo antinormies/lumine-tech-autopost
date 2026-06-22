@@ -9,6 +9,7 @@ from agent.actions import (
     cancel_compose,
     clean_text,
     click,
+    click_trend,
     execute_action,
     find_element,
     follow,
@@ -225,31 +226,34 @@ class TestTypeText:
 class TestScroll:
     def test_scroll_down(self, page):
         assert scroll_down(page) is True
-        assert page.evaluate.called
-        args = [c[0][0] for c in page.evaluate.call_args_list]
-        assert all("window.scrollBy(0," in a for a in args)
+        assert page.mouse.wheel.called
+        calls = page.mouse.wheel.call_args_list
+        assert len(calls) >= 2
 
     def test_scroll_down_exception(self, page):
-        page.evaluate.side_effect = Exception("fail")
+        page.mouse.wheel.side_effect = Exception("fail")
         assert scroll_down(page) is False
 
     def test_scroll_up(self, page):
         assert scroll_up(page) is True
-        args = [c[0][0] for c in page.evaluate.call_args_list]
-        assert all("window.scrollBy(0, -" in a for a in args)
+        assert page.mouse.wheel.called
+        calls = page.mouse.wheel.call_args_list
+        assert len(calls) >= 2
+        for args, _ in calls:
+            assert args[1] < 0
 
     def test_scroll_up_exception(self, page):
-        page.evaluate.side_effect = Exception("fail")
+        page.mouse.wheel.side_effect = Exception("fail")
         assert scroll_up(page) is False
 
     def test_scroll_down_long(self, page):
         assert scroll_down_long(page) is True
-        args = [c[0][0] for c in page.evaluate.call_args_list]
-        assert all("window.scrollBy(0," in a for a in args)
-        assert len(args) >= 8
+        assert page.mouse.wheel.called
+        calls = page.mouse.wheel.call_args_list
+        assert len(calls) >= 3
 
     def test_scroll_down_long_exception(self, page):
-        page.evaluate.side_effect = Exception("fail")
+        page.mouse.wheel.side_effect = Exception("fail")
         assert scroll_down_long(page) is False
 
 
@@ -560,13 +564,23 @@ class TestGoBack:
 class TestCancelCompose:
     def test_cancel_via_close_button(self, page):
         close_btn = _make_locator()
-        page.locator.return_value = close_btn
+        compose_check = _make_locator(visible=False)
+        def locator_side_effect(sel):
+            if "sheetDialog" in sel:
+                return compose_check
+            return close_btn
+        page.locator.side_effect = locator_side_effect
         assert cancel_compose(page) is True
         close_btn.click.assert_called_once()
 
     def test_cancel_via_escape(self, page):
         close_btn = _make_locator(visible=False)
-        page.locator.return_value = close_btn
+        compose_check = _make_locator(visible=False)
+        def locator_side_effect(sel):
+            if "sheetDialog" in sel:
+                return compose_check
+            return close_btn
+        page.locator.side_effect = locator_side_effect
         assert cancel_compose(page) is True
         page.keyboard.press.assert_called_with("Escape")
 
@@ -643,6 +657,47 @@ class TestFollow:
         assert follow(page) is False
 
 
+# ─── click_trend ───
+
+
+def _make_trend_cell(has_link: bool = True) -> MagicMock:
+    cell = MagicMock()
+    if has_link:
+        link = MagicMock()
+        link.count.return_value = 1
+        link.first = MagicMock()
+        cell.locator.return_value = link
+    else:
+        no_link = MagicMock()
+        no_link.count.return_value = 0
+        cell.locator.return_value = no_link
+    return cell
+
+
+class TestClickTrend:
+    def test_click_trend_with_link(self, page):
+        cell = _make_trend_cell(has_link=True)
+        page.locator.return_value.all.return_value = [cell]
+        assert click_trend(page, 0) is True
+        cell.locator.assert_called_with('a, [role="link"]')
+
+    def test_click_trend_no_link(self, page):
+        cell = _make_trend_cell(has_link=False)
+        page.locator.return_value.all.return_value = [cell]
+        assert click_trend(page, 0) is True
+        cell.click.assert_called_with(force=True, timeout=5000)
+
+    def test_click_trend_index_out_of_range(self, page):
+        page.locator.return_value.all.return_value = []
+        assert click_trend(page, 5) is False
+
+    def test_click_trend_exception(self, page):
+        cell = _make_trend_cell()
+        page.locator.return_value.all.return_value = [cell]
+        cell.scroll_into_view_if_needed.side_effect = Exception("fail")
+        assert click_trend(page, 0) is False
+
+
 # ─── ACTION_REGISTRY ───
 
 
@@ -654,10 +709,10 @@ class TestActionRegistry:
             "post", "navigate", "wait", "tweet", "like", "reply",
             "retweet", "quote", "bookmark", "compose", "cancel_compose",
             "open_tweet", "like_comment", "back", "rest",
-            "open_profile", "follow",
+            "open_profile", "follow", "click_trend",
         }
         assert set(ACTION_REGISTRY.keys()) == expected
-        assert len(ACTION_REGISTRY) == 23
+        assert len(ACTION_REGISTRY) == 24
 
     @pytest.mark.parametrize("action_name", [
         "click", "type", "scroll_down", "scroll_up", "scroll",
@@ -665,7 +720,7 @@ class TestActionRegistry:
         "post", "navigate", "wait", "tweet", "like", "reply",
         "retweet", "quote", "bookmark", "compose", "cancel_compose",
         "open_tweet", "like_comment", "back", "rest",
-        "open_profile", "follow",
+        "open_profile", "follow", "click_trend",
     ])
     def test_each_action_is_callable(self, action_name):
         handler = ACTION_REGISTRY.get(action_name)

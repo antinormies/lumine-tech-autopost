@@ -16,51 +16,56 @@ from utils.helpers import random_delay
 
 
 VISION_SYSTEM_INSTRUCTION = (
-    "You are a real human on Twitter. You see a screenshot of the page.\n\n"
+    "You are an Investor or Finance Advisor on Twitter. You see a screenshot.\n\n"
     "ACTIONS:\n"
     "- scroll_down/scroll — scroll feed (do this a lot)\n"
-    "- scroll_down_long — scroll far down to load many posts\n"
-    "- like(tweet_index) — like a post (0=first visible)\n"
+    "- scroll_down_long — scroll far down\n"
+    "- like(tweet_index) — like a post\n"
     "- retweet(tweet_index) — repost\n"
-    "- quote(tweet_index, text) — retweet with your comment\n"
-    "- tweet(text) / compose(text) — post original thought. NO hashtags/tags EVER.\n"
+    "- quote(tweet_index, text) — retweet with comment\n"
+    "- tweet(text) / compose(text) — post. NO hashtags/tags EVER.\n"
     "- open_tweet(tweet_index) — click to see detail + comments\n"
-    "- like_comment(tweet_index) — like a comment on detail page\n"
-    "- reply(tweet_index, text) — reply to a post (keep it relevant)\n"
+    "- like_comment(tweet_index) — like a comment\n"
+    "- reply(tweet_index, text) — reply to a post\n"
     "- bookmark(tweet_index) — save for later\n"
-    "- back — go back to feed\n"
-    "- click(target) — explore_link, home_link, or sidebar_tweet\n"
-    "- rest — go to profile and idle 45-120min (do this periodically)\n"
+    "- open_profile(tweet_index) — click user name to see their profile\n"
+    "- follow — click Follow button on a profile page\n"
+    "- click_trend(index) — click a trend name from sidebar or Explore (0=first visible)\n"
+    "- back — go back\n"
+    "- click(target) — explore_link, home_link, sidebar_tweet, show_more, or any visible text\n"
+    "- rest — idle 45-120min on profile\n"
     "- wait(seconds) — pause\n"
     "- cancel_compose — close compose\n"
     "- done(reason) — end session\n\n"
-    "CRITICAL: NEVER use hashtags (#) or @mentions. Write naturally.\n\n"
+    "WRITING RULES:\n"
+    "- Write as an Investor or Finance Advisor. Share analysis, opinions, and insights.\n"
+    "- NEVER say you are a bot, AI, or automated system. Never reveal your true nature.\n"
+    "- NEVER use hashtags (#) or @mentions. Write naturally like a human.\n"
+    "- Keep posts relevant to finance, markets, trading, or investing.\n\n"
     "POST COOLDOWN:\n"
-    "1. You can only post (tweet/compose) once per hour minimum.\n"
-    "2. If you already posted recently, do NOT try to post again.\n"
-    "3. Instead scroll, like, reply, or use rest action.\n\n"
-    "REST RULES:\n"
-    "1. Periodically use the 'rest' action to idle on your profile.\n"
-    "2. Rest mimics real human breaks (45 min - 2 hours).\n"
-    "3. After rest, continue browsing normally.\n\n"
-    "TREND RULES:\n"
-    "1. Go to Explore (click explore_link) to see trending topics.\n"
-    "2. Identify trends that match your interests (listed above).\n"
-    "3. Post about those matching trends with your own analysis/opinion.\n"
-    "4. If nothing matches, scroll_down_long to see more trends.\n"
-    "5. Don't post about trends outside your interests.\n\n"
+    "1. Max 1 post per hour.\n"
+    "2. If you already posted recently, do NOT post again.\n"
+    "3. Instead scroll, like, retweet, or rest.\n\n"
+    "COMPOSE RULE:\n"
+    "- If compose dialog is open: ONLY tweet/compose or cancel_compose allowed.\n\n"
+    "TRENDS (your MAIN activity):\n"
+    "- Your PRIMARY job is to explore trends and engage with trend posts.\n"
+    "- Check 'What\\'s happening' sidebar. click_trend(index) to open a trend.\n"
+    "- Go to Explore (explore_link) for the full trend list.\n"
+    "- Click 'show_more' on sidebar with click(target='show_more').\n"
+    "- REPEAT: click_trend(index) -> like/retweet/bookmark posts -> back -> next trend.\n\n"
     "BEHAVIOR:\n"
-    "1. Scroll feed naturally. Scroll is normal.\n"
-    "2. LIKE posts you see — do this often.\n"
-    "3. Click a post (open_tweet) to see details + comments.\n"
-    "4. Scroll comments, like interesting ones (like_comment).\n"
-    "5. RETWEET big or important info.\n"
-    "6. POST about trends matching your interests (see TREND RULES) only if cooldown has passed.\n"
-    "7. Browse Trends/Explore frequently — scroll through, like a few, post about what fits.\n"
-    "8. Vary between feed and trends — don't do just one thing.\n"
-    "9. Reply only when relevant. No unrelated replies.\n"
-    "10. NEVER engage the same tweet_index twice. Check which indices are already used.\n"
-    "11. Use 'rest' occasionally to seem human — especially after posting.\n\n"
+    "1. scroll_down_long to load posts. LIKE + RETWEET + BOOKMARK as you scroll.\n"
+    "2. Check sidebar trends. click_trend to open one. LIKE + RETWEET posts about it.\n"
+    "3. scroll_down_long more trend posts. Like + retweet more.\n"
+    "4. Open a trend post (open_tweet). Like comments.\n"
+    "5. Open profile (open_profile). Follow if interesting.\n"
+    "6. back. click_trend another. Repeat the cycle.\n"
+    "7. After 3-4 trends, scroll home feed a bit. LIKE posts there too.\n"
+    "8. Go to Explore (explore_link). Click trends there. Like/retweet more.\n"
+    "9. Post about a trend matching your finance interests (if cooldown passed).\n"
+    "10. Use 'rest' after 10-15 actions. Then start again.\n"
+    "11. NEVER engage same tweet_index twice.\n\n"
     "Respond ONLY JSON:\n"
     '{"action": "...", "reason": "...", "target": "...", "text": "...", "tweet_index": 0, "amount": 600, "seconds": 5}'
 )
@@ -73,12 +78,72 @@ class VisionAgent:
         self.memory = Memory()
         self.system_prompt = system_prompt
         self.full_prompt = f"{system_prompt}\n\n{VISION_SYSTEM_INSTRUCTION}"
+        self._compose_streak = 0
+
+    def _is_compose_open(self) -> bool:
+        try:
+            dialog = self.page.locator('[data-testid="sheetDialog"]')
+            return dialog.is_visible(timeout=1000)
+        except Exception:
+            return False
+
+    def _priority_nudge(self, trends_text: str = "") -> str:
+        max_eng = config.MAX_ENGAGEMENTS
+        eng = self.memory.total_engagements()
+        total = len(self.memory.actions)
+        likes = self.memory.engagement_counts.get("like", 0)
+        retweets = self.memory.engagement_counts.get("retweet", 0)
+        bookmarks = self.memory.engagement_counts.get("bookmark", 0)
+        follows = self.memory.engagement_counts.get("follow", 0)
+        opened = sum(1 for a in self.memory.actions if a["action"] == "open_tweet")
+        profiles = sum(1 for a in self.memory.actions if a["action"] == "open_profile")
+        recent_fails = sum(1 for a in self.memory.actions[-4:] if not a.get("success"))
+        trend_clicks = sum(1 for a in self.memory.actions if a["action"] == "click_trend")
+
+        if self._is_compose_open():
+            can_post = self.memory.can_tweet(1.0)
+            if not can_post:
+                return "COMPOSE OPEN — cancel_compose NOW (post blocked by cooldown)."
+            return "COMPOSE OPEN — tweet(text) to post or cancel_compose."
+
+        has_trends = bool(trends_text.strip())
+
+        if has_trends and trend_clicks < 1:
+            return "click_trend(0) to see trend posts, then like/retweet."
+
+        if has_trends:
+            if likes < 4:
+                return "LIKE and RETWEET trend posts NOW."
+            if retweets < 2:
+                return "RETWEET a trend post."
+            if bookmarks < 1:
+                return "BOOKMARK a trend post."
+            if opened < 2:
+                return "open_tweet and like comments."
+            return "click_trend another, like/retweet more."
+
+        if eng < max_eng and total < 5:
+            return "scroll_down_long + like to warm up."
+        if likes < 3 and eng < max_eng:
+            return "Like tweets in feed."
+        if retweets < 1 and eng < max_eng:
+            return "Retweet something."
+        if opened < 2 and eng < max_eng:
+            return "open_tweet to see comments."
+        if profiles < 1 and eng < max_eng:
+            return "open_profile, maybe follow."
+        if follows < 1 and eng < max_eng:
+            return "Follow someone interesting."
+        if recent_fails >= 3:
+            return "STOP clicking. Scroll and like instead."
+        if eng < max_eng and total > 6:
+            return "Click Explore or sidebar trends."
+        return ""
 
     def _extract_trends(self) -> str:
         try:
-            url = self.page.url
             trend_cells = self.page.locator(SELECTORS["trend_item"]).all()
-            if not trend_cells or "explore" not in url.lower():
+            if not trend_cells:
                 return ""
             texts = []
             for t in trend_cells[:10]:
@@ -121,87 +186,59 @@ class VisionAgent:
 
         max_eng = config.MAX_ENGAGEMENTS
         eng = self.memory.total_engagements()
-        recent = self.memory.recent_summary(3)
         total_actions = len(self.memory.actions)
-        last_3_actions = [a["action"] for a in self.memory.actions[-3:]]
-        has_posted = self.memory.engagement_counts.get("tweet", 0)
-
-        post_suggestion = ""
-        if total_actions > 2 and has_posted < 1 and eng < max_eng:
-            post_suggestion = " POST something!"
-        elif total_actions > 5 and has_posted < 3 and eng < max_eng:
-            post_suggestion = " Post another!"
-
-        like_count = self.memory.engagement_counts.get("like", 0)
-        retweet_count = self.memory.engagement_counts.get("retweet", 0)
-        quote_count = self.memory.engagement_counts.get("quote", 0)
-        reply_count = self.memory.engagement_counts.get("reply", 0)
-        total_engage = like_count + retweet_count + quote_count + reply_count
-
-        engage_nudge = ""
-        if total_engage == 0 and total_actions > 2 and eng < max_eng:
-            engage_nudge = " PICK A TWEET AND LIKE IT NOW (like(tweet_index))."
-        elif total_engage < 2 and total_actions > 4 and eng < max_eng:
-            engage_nudge = " LIKE or RETWEET visible tweet NOW."
-        elif total_engage < 3 and total_actions > 6 and eng < max_eng:
-            engage_nudge = " RETWEET or QUOTE a tweet you see."
-        elif total_engage < 5 and total_actions > 9 and eng < max_eng:
-            engage_nudge = " Like or quote more tweets."
-
-        opened_tweet = sum(1 for a in self.memory.actions if a["action"] == "open_tweet")
-        commented_count = self.memory.engagement_counts.get("like_comment", 0)
-        tweet_detail_nudge = ""
-        if opened_tweet < 1 and total_actions > 3 and eng < max_eng:
-            tweet_detail_nudge = " Open a tweet (open_tweet) to see comments!"
-
-        recent_fails = sum(1 for a in self.memory.actions[-4:] if not a.get("success"))
-        stop_clicking = ""
-        if recent_fails >= 3:
-            stop_clicking = " STOP clicking! Use like/retweet/quote/tweet instead."
-
-        composer_check = ""
-        if "type" in last_3_actions and "tweet" not in last_3_actions:
-            composer_check = " You've been typing manually. Use 'tweet' action instead."
-        navigate_check = ""
-        last_targets = [str((a.get("params") or {}).get("target") or "") for a in self.memory.actions[-3:]]
-        bad_nav = any(kw in t.lower() for t in last_targets for kw in ("explore", "search", "notification", "message"))
-        if "navigate" in last_3_actions or bad_nav:
-            navigate_check = " STAY on feed."
+        last_3 = [a["action"] for a in self.memory.actions[-3:]]
 
         trends_text = self._extract_trends()
+        compose_open = self._is_compose_open()
 
-        used_reply = self.memory.used_indices("reply")
-        used_like = self.memory.used_indices("like")
-        used_retweet = self.memory.used_indices("retweet")
-        used_bookmark = self.memory.used_indices("bookmark")
-        used_quote = self.memory.used_indices("quote")
+        if compose_open:
+            can_post = self.memory.can_tweet(1.0)
+            if not can_post:
+                user_text = (
+                    f"Compose dialog is OPEN but post is on cooldown. URL: {url}\n"
+                    f"{last_result}"
+                    f"You cannot tweet right now. ONLY action: cancel_compose.\n"
+                    f"Close the compose dialog immediately."
+                )
+            else:
+                user_text = (
+                    f"Compose dialog is OPEN. URL: {url}\n"
+                    f"{last_result}"
+                    f"Compose open — tweet(text) to post or cancel_compose to close.\n"
+                    f"Do nothing else."
+                )
+        else:
+            cooldown_hours = 1
+            can_post = self.memory.can_tweet(cooldown_hours)
+            cooldown_text = ""
+            if not can_post:
+                last_t = self.memory.last_tweet_time
+                elapsed_m = max(0, int((time.time() - last_t) / 60)) if last_t else 0
+                remaining_m = max(1, 60 - elapsed_m)
+                cooldown_text = f" Post cooldown: {remaining_m}min left. Do NOT tweet/compose."
 
-        dup_guard = ""
-        if used_reply:
-            dup_guard += f" Already replied to indices: {sorted(used_reply)} — pick a different tweet."
-        if used_like:
-            dup_guard += f" Already liked indices: {sorted(used_like)} — pick a different tweet."
+            used_reply = self.memory.used_indices("reply")
+            used_like = self.memory.used_indices("like")
+            dup_guard = ""
+            if used_reply:
+                dup_guard += f" Already replied to indices: {sorted(used_reply)}."
+            if used_like:
+                dup_guard += f" Already liked indices: {sorted(used_like)}."
 
-        cooldown_hours = 1
-        can_post = self.memory.can_tweet(cooldown_hours)
-        cooldown_text = ""
-        if not can_post:
-            last_t = self.memory.last_tweet_time
-            elapsed_m = max(0, int((time.time() - last_t) / 60)) if last_t else 0
-            remaining_m = max(1, 60 - elapsed_m)
-            cooldown_text = f" Post cooldown: {remaining_m}min left. Do NOT tweet or compose."
-            post_suggestion = ""
+            nudge = self._priority_nudge(trends_text)
+            if nudge:
+                nudge = f" >>> {nudge}"
 
-        user_text = (
-            f"I'm on Twitter. Current URL: {url}\n"
-            f"{last_result}"
-            f"Engagements: {eng}/{max_eng} | Last: {', '.join(last_3_actions)}\n"
-            f"{trends_text}"
-            f"{cooldown_text}"
-            f"{dup_guard}"
-            f"{post_suggestion}{engage_nudge}{stop_clicking}{composer_check}{navigate_check}{tweet_detail_nudge}"
-            f"Look at screenshot. What next?"
-        )
+            user_text = (
+                f"I'm on Twitter. URL: {url}\n"
+                f"{last_result}"
+                f"Engagements: {eng}/{max_eng} | Last: {', '.join(last_3)}\n"
+                f"{trends_text}"
+                f"{cooldown_text}"
+                f"{dup_guard}"
+                f"{nudge}"
+            )
 
         response = self.llm.vision_chat(
             system_prompt=self.full_prompt,
@@ -245,6 +282,13 @@ class VisionAgent:
         if not self._page_alive():
             logger.warning("Page is no longer alive, stopping")
             return False
+
+        if self._is_compose_open() and not self.memory.can_tweet(1.0):
+            logger.info("Compose open but post blocked — cancelling then scrolling")
+            execute_action(self.page, "cancel_compose", {})
+            execute_action(self.page, "scroll_down_long", {})
+            time.sleep(1)
+
         decision = self.decide_action()
         if decision is None:
             logger.warning("Vision model unavailable or page closed, stopping")
@@ -261,13 +305,40 @@ class VisionAgent:
 
         params = {k: v for k, v in decision.items() if k not in ("action", "reason")}
 
+        INDEXED_ACTIONS = {"like", "reply", "retweet", "quote", "bookmark", "open_tweet", "like_comment", "open_profile"}
+        tweet_idx = params.get("tweet_index")
+        if tweet_idx is not None and action in INDEXED_ACTIONS:
+            count = len(self.page.locator(SELECTORS["tweet_article"]).all())
+            if count == 0:
+                logger.info(f"No tweets on page, blocking {action}")
+                self.memory.record_action(action, params, decision.get("reason", ""), False)
+                return True
+            if int(tweet_idx) >= count:
+                clamped = count - 1
+                logger.info(f"Clamped tweet_index {tweet_idx} -> {clamped} (only {count} tweets visible)")
+                params["tweet_index"] = clamped
+
+        COMPOSE_ONLY = {"tweet", "compose", "post", "cancel_compose"}
+        if self._is_compose_open():
+            if action not in COMPOSE_ONLY:
+                self._compose_streak += 1
+                logger.info(f"Blocked {action} — compose is open (streak={self._compose_streak})")
+                self.memory.record_action(action, params, decision.get("reason", ""), False)
+                if self._compose_streak >= 2:
+                    logger.info(f"Auto-cancelling compose after {self._compose_streak} blocked actions")
+                    self._compose_streak = 0
+                    execute_action(self.page, "cancel_compose", {})
+                    self.memory.record_action("cancel_compose", {}, "auto-escape compose loop", True)
+                    return True
+                return True
+            self._compose_streak = 0
+
         POST_ACTIONS = {"tweet", "compose", "post"}
         if action in POST_ACTIONS and not self.memory.can_tweet(1.0):
             logger.info(f"Blocked {action} — post cooldown active (last tweet < 1h ago)")
             self.memory.record_action(action, params, decision.get("reason", ""), False)
             return True
 
-        tweet_idx = params.get("tweet_index")
         DUPE_CHECKED = {"reply", "like", "retweet", "quote", "bookmark"}
         if action in DUPE_CHECKED and tweet_idx is not None:
             used = self.memory.used_indices(action)

@@ -1,8 +1,13 @@
+import json
+import os
 import time
 from collections import Counter
+from pathlib import Path
 
 
 ENGAGEMENT_ACTIONS = {"like", "reply", "retweet", "bookmark", "tweet"}
+POST_ACTIONS = {"tweet", "compose", "post"}
+PERSISTENCE_FILE = Path(__file__).resolve().parent.parent / "data" / "persistence.json"
 
 
 class Memory:
@@ -11,6 +16,7 @@ class Memory:
         self.seen_tweets: set[str] = set()
         self.engagement_counts: Counter = Counter()
         self.last_tweet_time: float | None = None
+        self._load()
 
     def record_action(self, action: str, params: dict, reason: str, success: bool):
         entry = {
@@ -20,8 +26,9 @@ class Memory:
             "success": success,
         }
         self.actions.append(entry)
-        if action == "tweet" and success:
+        if action in POST_ACTIONS and success:
             self.last_tweet_time = time.time()
+            self._save()
         if action in ENGAGEMENT_ACTIONS and success:
             self.engagement_counts[action] += 1
 
@@ -60,5 +67,22 @@ class Memory:
                     indices.add(int(idx))
         return indices
 
+    def _load(self):
+        try:
+            if PERSISTENCE_FILE.exists():
+                data = json.loads(PERSISTENCE_FILE.read_text())
+                self.last_tweet_time = data.get("last_tweet_time")
+        except Exception:
+            self.last_tweet_time = None
+
+    def _save(self):
+        try:
+            PERSISTENCE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            data = {"last_tweet_time": self.last_tweet_time}
+            PERSISTENCE_FILE.write_text(json.dumps(data, indent=2))
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Failed to persist state: {e}")
+
     def save(self):
-        pass
+        self._save()

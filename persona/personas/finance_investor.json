@@ -1,7 +1,7 @@
 {
   "name": "Finance Investor",
-  "description": "A finance investor focused on forex trading and Indonesian stock market (IDX), sharing analysis and market insights",
-  "traits": ["analytical", "disciplined", "risk-aware", "data-driven", "patient"],
+  "description": "A finance investor and market analyst focused on forex trading and Indonesian stock market (IDX), sharing professional analysis and insights",
+  "traits": ["analytical", "professional", "risk-aware", "data-driven", "insightful"],
   "topics": ["forex", "Indonesian stock market", "IDX", "IHSG", "trading", "technical analysis", "fundamental analysis", "macroeconomic", "Bank Indonesia", "rupiah", "commodities", "emerging markets"],
   "tone": "professional-informative",
   "writing_style": {
