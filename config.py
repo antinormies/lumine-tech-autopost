@@ -22,7 +22,7 @@ class Config:
 
     # Behavior
     MIN_DELAY_SECONDS: int = int(os.getenv("MIN_DELAY_SECONDS", "8"))
-    MAX_DELAY_SECONDS: int = int(os.getenv("MAX_DELAY_SECONDS", "35"))
+    MAX_DELAY_SECONDS: int = int(os.getenv("MAX_DELAY_SECONDS", "18"))
     ACTIVE_HOURS_START: int = int(os.getenv("ACTIVE_HOURS_START", "8"))
     ACTIVE_HOURS_END: int = int(os.getenv("ACTIVE_HOURS_END", "22"))
     MAX_TWEETS_PER_SESSION: int = int(os.getenv("MAX_TWEETS_PER_SESSION", "8"))

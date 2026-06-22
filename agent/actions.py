@@ -1,3 +1,4 @@
+import os
 import random
 import re
 import time
@@ -28,16 +29,16 @@ def _jitter_mouse(page: Page):
         pass
 
 
+BLOCKED_CLICKS = {"follow", "following", "unfollow", "like", "direct_message", "send"}
+
+
 def click(page: Page, target: str) -> bool:
     if not target:
         logger.warning("No target specified for click")
         return False
     resolved = resolve_target(target)
-    if resolved in {"home_link", "explore_link", "notifications_link", "messages_link", "search_box"}:
-        logger.info(f"Blocked navigation: {target}")
-        return False
-    if resolved != "sidebar_tweet":
-        logger.info(f"Blocked non-essential click: {target}")
+    if resolved in BLOCKED_CLICKS:
+        logger.info(f"Blocked: {target}")
         return False
     el = find_element(page, target)
     desc = ELEMENT_DESCRIPTIONS.get(target, target)
@@ -228,17 +229,30 @@ def quote_tweet(page: Page, index: int, text: str) -> bool:
     if index >= len(tweets):
         return False
     try:
+        _jitter_mouse(page)
         rt_btn = tweets[index].locator(SELECTORS["retweet_button"])
+        rt_btn.scroll_into_view_if_needed(timeout=3000)
         rt_btn.click()
+        time.sleep(random.uniform(0.5, 1.5))
         quote_btn = page.locator(SELECTORS["quote_option"])
-        quote_btn.wait_for(timeout=3000)
+        quote_btn.wait_for(timeout=5000)
         quote_btn.click()
-        time.sleep(1)
+        time.sleep(random.uniform(0.5, 1.5))
         compose = page.locator(SELECTORS["tweet_compose"])
-        compose.fill(clean_text(text))
-        time.sleep(0.5)
-        post_btn = page.locator(SELECTORS["tweet_button"])
-        post_btn.click()
+        compose.wait_for(timeout=5000)
+        compose.focus()
+        page.keyboard.type(clean_text(text), delay=random.randint(20, 60))
+        time.sleep(random.uniform(0.5, 1.5))
+        post_btn = page.locator(SELECTORS["tweet_button_small"])
+        if not post_btn.is_visible(timeout=2000):
+            post_btn = page.locator(SELECTORS["tweet_button"])
+        post_btn.wait_for(timeout=5000)
+        timeout_end = time.time() + 10
+        while time.time() < timeout_end:
+            if post_btn.is_enabled():
+                break
+            time.sleep(0.5)
+        post_btn.click(force=True)
         logger.info(f"Quoted tweet #{index}")
         time.sleep(1)
         return True
@@ -262,6 +276,54 @@ def bookmark_nth(page: Page, index: int = 0) -> bool:
         return False
 
 
+def open_tweet(page: Page, index: int = 0) -> bool:
+    tweets = page.locator(SELECTORS["tweet_article"]).all()
+    if index >= len(tweets):
+        logger.warning(f"Tweet index {index} out of range ({len(tweets)} tweets)")
+        return False
+    try:
+        _jitter_mouse(page)
+        article = tweets[index]
+        article.scroll_into_view_if_needed(timeout=3000)
+        time.sleep(random.uniform(0.3, 1))
+        article.click(force=True, timeout=5000)
+        logger.info(f"Opened tweet #{index} detail view")
+        time.sleep(random.uniform(1, 2))
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to open tweet #{index}: {e}")
+        return False
+
+
+def like_comment(page: Page, index: int = 0) -> bool:
+    """Like a comment/reply within a tweet detail page.
+    Comments are articles with data-testid='tweet' inside the detail view.
+    """
+    comments = page.locator(SELECTORS["tweet_article"]).all()
+    if 0 <= index < len(comments):
+        try:
+            like_btn = comments[index].locator(SELECTORS["like_button"])
+            if like_btn.is_visible(timeout=3000):
+                like_btn.click()
+                logger.info(f"Liked comment #{index}")
+                time.sleep(1)
+                return True
+        except Exception as e:
+            logger.warning(f"Failed to like comment #{index}: {e}")
+    return False
+
+
+def go_back(page: Page) -> bool:
+    try:
+        page.go_back(wait_until="domcontentloaded")
+        time.sleep(2)
+        logger.info("Navigated back")
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to go back: {e}")
+        return False
+
+
 def cancel_compose(page: Page) -> bool:
     try:
         close_btn = page.locator('[data-testid="app-bar-close"]')
@@ -278,12 +340,45 @@ def cancel_compose(page: Page) -> bool:
         return False
 
 
+def rest(page: Page) -> bool:
+    try:
+        profile_url = f"https://x.com/{os.getenv('TWITTER_USERNAME', '')}"
+        if profile_url:
+            page.goto(profile_url, wait_until="domcontentloaded")
+            time.sleep(3)
+        duration = random.randint(2700, 7200)
+        logger.info(f"Resting for {duration // 60}-{duration // 60 + 1}min on profile")
+        time.sleep(duration)
+        return True
+    except Exception as e:
+        logger.warning(f"Rest failed: {e}")
+        return False
+
+
+def scroll_down_long(page: Page, amount: int = 2500) -> bool:
+    amount = random.randint(2000, 5000)
+    steps = random.randint(8, 15)
+    per_step = amount // steps
+    try:
+        for _ in range(steps):
+            page.evaluate(f"window.scrollBy(0, {per_step})")
+            time.sleep(random.uniform(0.08, 0.3))
+        logger.info(f"Scrolled down long ~{amount}px")
+        time.sleep(random.uniform(1, 2.5))
+        return True
+    except Exception as e:
+        logger.warning(f"Long scroll down failed: {e}")
+        return False
+
+
 ACTION_REGISTRY = {
     "click": lambda page, params: click(page, params.get("target", "")),
     "type": lambda page, params: type_text(page, params.get("target", ""), params.get("text", "")),
     "scroll_down": lambda page, params: scroll_down(page, params.get("amount", 600)),
     "scroll_up": lambda page, params: scroll_up(page, params.get("amount", 600)),
     "scroll": lambda page, params: scroll_down(page, params.get("amount", 600)),
+    "scroll_down_long": lambda page, params: scroll_down_long(page, params.get("amount", 2500)),
+    "post": lambda page, params: tweet(page, params.get("text", "")),
     "navigate": lambda page, params: navigate(page, params.get("url", "")),
     "wait": lambda page, params: wait(params.get("seconds", 5)),
     "tweet": lambda page, params: tweet(page, params.get("text", "")),
@@ -292,7 +387,12 @@ ACTION_REGISTRY = {
     "retweet": lambda page, params: retweet_nth(page, params.get("tweet_index", 0)),
     "quote": lambda page, params: quote_tweet(page, params.get("tweet_index", 0), params.get("text", "")),
     "bookmark": lambda page, params: bookmark_nth(page, params.get("tweet_index", 0)),
+    "compose": lambda page, params: tweet(page, params.get("text", "")),
     "cancel_compose": lambda page, params: cancel_compose(page),
+    "open_tweet": lambda page, params: open_tweet(page, params.get("tweet_index", 0)),
+    "like_comment": lambda page, params: like_comment(page, params.get("tweet_index", 0)),
+    "back": lambda page, params: go_back(page),
+    "rest": lambda page, params: rest(page),
 }
 
 

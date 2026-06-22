@@ -19,6 +19,8 @@ VISIBLE_TEXT_MAP: dict[str, str] = {
     "bookmark": "bookmark_button",
     "Trending": "explore_link",
     "trending": "explore_link",
+    "Trend": "explore_link",
+    "trend": "explore_link",
     "For you": "home_link",
     "for you": "home_link",
     "Following": "home_link",
@@ -77,6 +79,9 @@ SELECTORS = {
     # Compose dialog
     "cancel_compose": '[data-testid="app-bar-close"]',
     "compose_close": '[data-testid="close"]',
+    # Trends
+    "trend_item": '[data-testid="trend"]',
+    "explore_trends": '//span[contains(text(), "Trends")]',
 }
 
 ELEMENT_DESCRIPTIONS = {
@@ -90,4 +95,6 @@ ELEMENT_DESCRIPTIONS = {
     "home_link": "the Home navigation link",
     "explore_link": "the Explore navigation link",
     "cancel_compose": "the close/cancel button on the compose dialog",
+    "tweet_article": "a tweet to open and view details",
+    "trend_item": "a trending topic",
 }

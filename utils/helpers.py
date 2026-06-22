@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import math
 
 
-def random_delay(min_sec: float = 5, max_sec: float = 30) -> float:
+def random_delay(min_sec: float = 8, max_sec: float = 18) -> float:
     delay = random.uniform(min_sec, max_sec)
     time.sleep(delay)
     return delay
