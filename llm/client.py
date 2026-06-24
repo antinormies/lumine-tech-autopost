@@ -18,9 +18,9 @@ class LLMResponse:
 
 
 class LLMClient:
-    def __init__(self):
-        self.base_url = config.LLM_BASE_URL
-        self.model = config.LLM_MODEL
+    def __init__(self, base_url: str | None = None, model: str | None = None):
+        self.base_url = base_url or config.LLM_BASE_URL
+        self.model = model or config.LLM_MODEL
         logger.info(f"LLM client initialized: {self.base_url}, model={self.model}")
 
     def _image_to_base64(self, image: Image.Image, format: str = "PNG") -> str:

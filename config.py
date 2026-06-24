@@ -5,9 +5,14 @@ load_dotenv()
 
 
 class Config:
-    # LLM Server
+    # LLM Server (Analyst)
     LLM_BASE_URL: str = os.getenv("LLM_BASE_URL", "http://localhost:8080/v1")
     LLM_MODEL: str = os.getenv("LLM_MODEL", "Qwen2.5-3B")
+
+    # Mastermind LLM (Strategist)
+    MASTERMIND_BASE_URL: str = os.getenv("MASTERMIND_BASE_URL", "http://localhost:8080/v1")
+    MASTERMIND_MODEL: str = os.getenv("MASTERMIND_MODEL", "Gemma 4-E3B-QAT")
+    MASTERMIND_CHECKIN_INTERVAL: int = int(os.getenv("MASTERMIND_CHECKIN_INTERVAL", "10"))
 
     # Twitter credentials
     TWITTER_USERNAME: str = os.getenv("TWITTER_USERNAME", "")

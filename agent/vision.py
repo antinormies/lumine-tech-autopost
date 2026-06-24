@@ -8,6 +8,7 @@ from PIL import Image
 from playwright.sync_api import Page
 
 from agent.actions import execute_action
+from brain.mastermind import Mastermind
 
 MILITARY_GOVT_KEYWORDS = {
     "militer", "tentara", "angkatan bersenjata", "polisi", "tni", "polri",
@@ -51,7 +52,14 @@ VISION_SYSTEM_INSTRUCTION = (
     "- Retweet or tweet something random and fun, not just finance.\n"
     "- NEVER say you are a bot, AI, or automated system. Never reveal your true nature.\n"
     "- NEVER use hashtags (#) or @mentions. Write naturally like a human.\n"
-    "- AVOID topics related to military or government/politics.\n\n"
+    "- AVOID topics related to military or government/politics.\n"
+    "- Always frame responses POSITIVELY. Even for negative news, focus on silver linings, opportunities, and lessons.\n"
+    "- Never doom-and-gloom.\n\n"
+    "LANGUAGE RULES:\n"
+    "- If replying to a post in Bahasa Indonesia, reply in Bahasa Indonesia.\n"
+    "- If replying to a post in English, reply in English.\n"
+    "- Match the language naturally — don't switch mid-reply.\n"
+    "- Your own original tweets stay in English.\n\n"
     "POST COOLDOWN:\n"
     "1. Max 1 post per hour (tweet/compose).\n"
     "2. Quote (retweet with comment) is NOT locked — use it freely on relevant posts.\n"
@@ -99,13 +107,21 @@ VISION_SYSTEM_INSTRUCTION = (
 
 
 class VisionAgent:
-    def __init__(self, page: Page, llm: LLMClient, system_prompt: str):
+    def __init__(self, page: Page, llm: LLMClient, system_prompt: str, mastermind_brief: str = "", mastermind: Optional[Mastermind] = None):
         self.page = page
         self.llm = llm
         self.memory = Memory()
+        self.mastermind = mastermind
+        self._mastermind_advice = ""
+        self._last_checkin_step = 0
         self.system_prompt = system_prompt
-        self.full_prompt = f"{system_prompt}\n\n{VISION_SYSTEM_INSTRUCTION}"
+        brief_block = f"\n\n═══ MASTERMIND STRATEGY ═══\n{mastermind_brief}\n════════════════════════\n\n" if mastermind_brief else ""
+        self.full_prompt = f"{system_prompt}{brief_block}{VISION_SYSTEM_INSTRUCTION}"
+        if mastermind_brief:
+            logger.info(f"[ANALYST] Injected mastermind brief into system prompt ({len(mastermind_brief)} chars)")
         self._compose_streak = 0
+        self._phase = "home"
+        self._phase_steps = 0
 
     def _is_compose_open(self) -> bool:
         try:
@@ -115,6 +131,10 @@ class VisionAgent:
             return False
 
     def _page_context(self) -> str:
+        ctx = self._page_label()
+        return f"[{self._phase.upper()} cluster: step {self._phase_steps}] {ctx}"
+
+    def _page_label(self) -> str:
         if self._is_compose_open():
             return "📍 ACTIVE: Post compose dialog"
 
@@ -169,6 +189,28 @@ class VisionAgent:
                 break
         return streak
 
+    def _mastermind_checkin(self, step: int) -> str:
+        if not self.mastermind:
+            return ""
+        if step - self._last_checkin_step < config.MASTERMIND_CHECKIN_INTERVAL:
+            return self._mastermind_advice
+        self._last_checkin_step = step
+        try:
+            url = self.page.url
+        except Exception:
+            url = "unknown"
+        recent = self.memory.actions[-6:]
+        context = (
+            f"Step {step} | URL: {url}\n"
+            f"Phase: {getattr(self, '_phase', 'home')}/{getattr(self, '_phase_steps', 0)} | "
+            f"Engagements: {self.memory.total_engagements()}/{config.MAX_ENGAGEMENTS}\n"
+        )
+        advice = self.mastermind.advise(context, recent)
+        if advice:
+            self._mastermind_advice = advice
+            logger.info(f"[MASTERMIND] Check-in at step {step}: {advice[:100]}")
+        return self._mastermind_advice
+
     def _priority_nudge(self, trends_text: str = "") -> str:
         max_eng = config.MAX_ENGAGEMENTS
         eng = self.memory.total_engagements()
@@ -208,42 +250,51 @@ class VisionAgent:
 
         has_trends = bool(trends_text.strip())
 
-        # Phase 1: Home feed — brief warmup then GO TO EXPLORE
+        # Phase 1: Home feed — cluster minimum 10 steps
         if not on_explore:
-            if total < 3:
-                return "scroll_down_long + like posts to warm up."
-            if likes < 2:
-                return "like(0) or open_tweet(0) once, then GO TO EXPLORE."
-            return "DONE WARMING UP. click(target='explore_link') NOW — Explore has real trends."
+            if self._phase_steps < 10:
+                if likes < 4:
+                    return "scroll_down_long + LIKE interesting posts."
+                if opened < 2:
+                    return "open_tweet interesting posts, LIKE comments."
+                if profiles < 1:
+                    return "open_profile on interesting people."
+            return f"Home cluster done ({self._phase_steps}/10). SWITCH TO EXPLORE — click(target='explore_link') NOW."
 
-        # On Explore — Phases 2/3
-        if tab_clicks < 1 and trend_clicks < 1:
-            return "On Explore — click a tab first (click(target='For you') or click(target='Trending'))."
-        if trend_clicks < 1:
-            return "click_trend(0) — stop scrolling, click a trend."
-        if tab_clicks < 2:
-            return "After this trend, click(target='Trending') for real trends."
+        # On Explore — Phases 2/3 — cluster minimum 15 steps
+        if on_explore and self._phase_steps < 15:
+            if tab_clicks < 1 and trend_clicks < 1:
+                return "On Explore — click a tab first (click(target='For you') or click(target='Trending'))."
+            if trend_clicks < 1:
+                return "click_trend(0) — stop scrolling, click a trend."
+            if tab_clicks < 2:
+                return "After this trend, click(target='Trending') for real trends."
 
-        # General trend engagement (on any page with visible trends)
-        if has_trends:
-            if likes < 5:
-                return "scroll trend posts -> LIKE + RETWEET + QUOTE."
-            if quotes < 3:
-                return "QUOTE a trend post with your take."
-            if retweets < 3:
-                return "RETWEET a trend post."
-            if bookmarks < 2:
-                return "BOOKMARK a trend post."
-            if opened < 3:
-                return "open_tweet -> read -> reply if relevant -> like comments."
-            if profiles < 1:
-                return "open_profile -> follow if interesting."
-            replies = self.memory.engagement_counts.get("reply", 0)
-            if replies < 1:
-                return "reply to a trend post if high relevance."
-            if searches < 2:
-                return "No matching trends left — search_topic('interest keyword')."
-            return "click_trend another from Explore or search again."
+            # General trend engagement (within explore cluster)
+            if has_trends:
+                if likes < 5:
+                    return "scroll trend posts -> LIKE + RETWEET + QUOTE."
+                if quotes < 3:
+                    return "QUOTE a trend post with your take."
+                if retweets < 3:
+                    return "RETWEET a trend post."
+                if bookmarks < 2:
+                    return "BOOKMARK a trend post."
+                if opened < 3:
+                    return "open_tweet -> read -> reply if relevant -> like comments."
+                if profiles < 1:
+                    return "open_profile -> follow if interesting."
+                replies = self.memory.engagement_counts.get("reply", 0)
+                if replies < 1:
+                    return "reply to a trend post if high relevance."
+                if searches < 2:
+                    return "No matching trends left — search_topic('interest keyword')."
+                return "click_trend another from Explore or search again."
+            return "On Explore but no trends visible — click_trend(0) or search_topic('keyword')."
+
+        # Explore cluster complete — switch back to Home
+        if on_explore:
+            return f"Explore cluster done ({self._phase_steps}/15). SWITCH BACK TO HOME — click(target='home_link') NOW."
 
         # Fallback engagement nudges (no trends visible)
         if eng < max_eng and total < 5:
@@ -305,7 +356,7 @@ class VisionAgent:
             logger.warning(f"Screenshot failed: {e}")
             return None
 
-    def decide_action(self) -> Optional[dict]:
+    def decide_action(self, step: int = 0) -> Optional[dict]:
         screenshot = self.capture_screenshot()
         if screenshot is None:
             return None
@@ -388,6 +439,7 @@ class VisionAgent:
             else:
                 dup_guard += " All indices used. Scroll down for fresh tweets."
 
+        mastermind_advice = self._mastermind_checkin(step)
         nudge = self._priority_nudge(trends_text)
         if nudge:
             nudge = f" >>> {nudge}"
@@ -401,6 +453,7 @@ class VisionAgent:
             f"{trends_text}"
             f"{cooldown_text}"
             f"{dup_guard}"
+            f"{mastermind_advice}"
             f"{nudge}"
         )
 
@@ -434,7 +487,7 @@ class VisionAgent:
             if not action:
                 logger.warning("No action in decision")
                 return None
-            logger.info(f"Decision: {decision.get('reason', 'no reason')}")
+            logger.info(f"[ANALYST] Action: {decision.get('action', '?')} | Reason: {decision.get('reason', 'no reason')}")
             return decision
         except json.JSONDecodeError as e:
             logger.warning(f"Failed to parse action JSON: {e}")
@@ -453,10 +506,20 @@ class VisionAgent:
         except Exception:
             return ""
 
-    def run_step(self) -> bool:
+    def run_step(self, step: int = 0) -> bool:
         if not self._page_alive():
             logger.warning("Page is no longer alive, stopping")
             return False
+
+        # Phase tracking
+        on_explore = "explore" in self._safe_url()
+        new_phase = "explore" if on_explore else "home"
+        if new_phase != self._phase:
+            self._phase = new_phase
+            self._phase_steps = 1
+            logger.info(f"Phase switched to {self._phase}")
+        else:
+            self._phase_steps += 1
 
         if self._is_compose_open() and not self.memory.can_tweet(1.0):
             logger.info("Compose open but post blocked — cancelling then scrolling")
@@ -464,7 +527,7 @@ class VisionAgent:
             execute_action(self.page, "scroll_down_long", {})
             time.sleep(1)
 
-        decision = self.decide_action()
+        decision = self.decide_action(step)
         if decision is None:
             logger.warning("Vision model unavailable or page closed, stopping")
             return False
@@ -478,8 +541,15 @@ class VisionAgent:
             logger.info(f"Agent done: {decision.get('reason', '')}")
             return False
 
-        target = str(decision.get("target", "")).strip().lower()
-        if action == "click" and "click_trend" in target:
+        target = str(decision.get("target", "")).strip()
+        m = re.match(r"^click\s*\(\s*target\s*=\s*['\"]([^'\"]+)['\"]\s*\)$", target, re.IGNORECASE)
+        if m:
+            inner = m.group(1)
+            logger.info(f"Parsed nested target '{target}' -> '{inner}'")
+            decision["target"] = target = inner
+
+        target_lower = target.lower()
+        if action == "click" and "click_trend" in target_lower:
             idx = decision.get("tweet_index", 0)
             logger.info(f"Normalized click(target={target}) -> explore_link (LLM meant 'go to Explore')")
             decision["target"] = "explore_link"
@@ -491,11 +561,10 @@ class VisionAgent:
 
         url_lower = self._safe_url()
         if action == "click":
-            target = str(decision.get("target", "")).strip().lower()
-            if target in ("trending", "for you") and "explore" not in url_lower:
+            if target_lower in ("trending", "for you") and "explore" not in url_lower:
                 logger.info(f"Normalized click({target}) -> explore_link (not on Explore)")
                 decision["target"] = "explore_link"
-            elif target in ("trending", "for you") and "explore" in url_lower:
+            elif target_lower in ("trending", "for you") and "explore" in url_lower:
                 logger.info(f"On Explore — keeping click({target}) for tab")
 
         action = decision["action"]  # re-sync after normalizations
@@ -564,8 +633,6 @@ class VisionAgent:
             logger.info("Blocked scroll on Explore — no trend clicked yet. Must click_trend first.")
             self.memory.record_action(action, params, decision.get("reason", ""), False)
             return True
-            self.memory.record_action(action, params, decision.get("reason", ""), False)
-            return True
 
         POST_ACTIONS = {"tweet", "compose", "post"}
         if action in POST_ACTIONS and not self.memory.can_tweet(1.0):
@@ -616,7 +683,7 @@ class VisionAgent:
                 execute_action(self.page, "rest", {})
                 time.sleep(2)
 
-            should_continue = self.run_step()
+            should_continue = self.run_step(step)
             if not should_continue:
                 break
             step += 1
