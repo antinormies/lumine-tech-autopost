@@ -14,7 +14,7 @@ MILITARY_GOVT_KEYWORDS = {
     "militer", "tentara", "angkatan bersenjata", "polisi", "tni", "polri",
     "pemerintah", "politik", "presiden", "menteri", "kementerian", "dpr", "mpr",
     "army", "military", "government", "politics", "president", "minister",
-    "soldier", "war", "senjata", "nuklir", "rudal", "perang", "prajurit",
+    "soldier", "war", "senjata", "nuklir", "rudal", "perang", "prajurit", "mbg",
 }
 from brain.memory import Memory
 from config import config
@@ -81,26 +81,28 @@ VISION_SYSTEM_INSTRUCTION = (
     "PHASE 2 — EXPLORE 'FOR YOU' TAB (main activity):\n"
     "2. click(target='explore_link') to go to Explore.\n"
     "3. click(target='For you') to see personalized trends.\n"
-    "4. scroll_down_long through trend list. Pick interest-matching trends.\n"
-    "5. click_trend(N) to open. Scroll posts. LIKE + RETWEET + BOOKMARK + QUOTE.\n"
+    "4. Pick a trend — vary indices (click_trend(0), click_trend(1), click_trend(2)...).\n"
+    "5. On trend results: LIKE + REPLY + RETWEET + BOOKMARK + QUOTE posts. REPLY often with your opinion.\n"
     "6. open_tweet -> reply -> like comments. open_profile -> follow.\n"
-    "7. back to Explore. Pick next trend. Repeat.\n"
+    "7. back to Explore. Pick next trend (different index). Repeat.\n"
     "8. After matching trends exhausted, switch to Trending tab.\n\n"
     "PHASE 3 — EXPLORE 'TRENDING' TAB:\n"
     "9. click(target='Trending') for real trending topics.\n"
-    "10. Repeat same cycle: scroll -> pick -> click_trend -> engage -> back -> next.\n"
+    "10. Vary trend indices (click_trend(0), click_trend(1)...). LIKE + REPLY + RETWEET posts.\n"
     "11. First pick interest-matching trends. Then any specific non-military/govt trend.\n\n"
     "PHASE 4 — SEARCH (when trends don't match):\n"
     "12. If no trends match your interests, search_topic('interest keyword').\n"
-    "13. Pick keywords like 'AI', 'stocks', 'tech', 'music', etc.\n"
-    "14. scroll_down_long through results. LIKE + RETWEET + BOOKMARK + QUOTE.\n"
+    "13. Try keywords suggested by Mastermind, or 'AI', 'stocks', 'tech', 'music', etc.\n"
+    "14. scroll_down_long through results. LIKE + REPLY + RETWEET + BOOKMARK + QUOTE.\n"
     "15. open_tweet -> reply -> like comments. open_profile -> follow.\n"
-    "16. Try different search terms to find fresh content.\n\n"
+    "16. Try different search terms to find fresh content. REPLY often.\n\n"
     "GENERAL RULES:\n"
-    "17. Post about matching trends if cooldown allows.\n"
+    "17. Post about matching trends if cooldown allows — use web research from Mastermind.\n"
     "18. Quote is NOT locked — use it freely.\n"
-    "19. Use 'rest' after ~150 actions. Then restart from Phase 2.\n"
-    "20. NEVER engage same tweet_index twice.\n\n"
+    "19. REPLY to posts with your opinion — do this often. Reply is the most engaging action.\n"
+    "20. Use 'rest' after ~150 actions. Then restart from Phase 2.\n"
+    "21. NEVER engage same tweet_index twice.\n"
+    "22. Click different trend indices (0, 1, 2, 3...) — don't always pick the first.\n\n"
     "Respond ONLY JSON:\n"
     '{"action": "...", "reason": "...", "target": "...", "text": "...", "tweet_index": 0, "amount": 600, "seconds": 5}'
 )
@@ -189,7 +191,7 @@ class VisionAgent:
                 break
         return streak
 
-    def _mastermind_checkin(self, step: int) -> str:
+    def _mastermind_checkin(self, step: int, trends_text: str = "") -> str:
         if not self.mastermind:
             return ""
         if step - self._last_checkin_step < config.MASTERMIND_CHECKIN_INTERVAL:
@@ -205,10 +207,10 @@ class VisionAgent:
             f"Phase: {getattr(self, '_phase', 'home')}/{getattr(self, '_phase_steps', 0)} | "
             f"Engagements: {self.memory.total_engagements()}/{config.MAX_ENGAGEMENTS}\n"
         )
-        advice = self.mastermind.advise(context, recent)
+        advice = self.mastermind.advise(context, recent, trends_text, MILITARY_GOVT_KEYWORDS)
         if advice:
             self._mastermind_advice = advice
-            logger.info(f"[MASTERMIND] Check-in at step {step}: {advice[:100]}")
+            logger.info(f"[MASTERMIND] Check-in at step {step}: {advice[:120]}")
         return self._mastermind_advice
 
     def _priority_nudge(self, trends_text: str = "") -> str:
@@ -245,20 +247,24 @@ class VisionAgent:
         streak = self._scroll_streak()
         if streak >= 2:
             if on_explore:
-                return f"STOP SCROLLING ({streak}x). click_trend(0) NOW."
-            return f"STOP SCROLLING ({streak}x). like(0) or open_tweet(0) NOW."
+                return f"STOP SCROLLING ({streak}x). click_trend(0) or click_trend(1) NOW."
+            return f"STOP SCROLLING ({streak}x). like(0) or reply(0) NOW."
 
         has_trends = bool(trends_text.strip())
 
         # Phase 1: Home feed — cluster minimum 10 steps
         if not on_explore:
             if self._phase_steps < 10:
-                if likes < 4:
-                    return "scroll_down_long + LIKE interesting posts."
+                if likes < 3:
+                    return "scroll_down_long + LIKE + REPLY to interesting posts."
+                if replies < 1:
+                    return "REPLY to a post you see — share your opinion."
                 if opened < 2:
-                    return "open_tweet interesting posts, LIKE comments."
+                    return "open_tweet -> LIKE comments -> reply."
                 if profiles < 1:
                     return "open_profile on interesting people."
+                if quotes < 1:
+                    return "QUOTE a post with your take."
             return f"Home cluster done ({self._phase_steps}/10). SWITCH TO EXPLORE — click(target='explore_link') NOW."
 
         # On Explore — Phases 2/3 — cluster minimum 15 steps
@@ -266,31 +272,28 @@ class VisionAgent:
             if tab_clicks < 1 and trend_clicks < 1:
                 return "On Explore — click a tab first (click(target='For you') or click(target='Trending'))."
             if trend_clicks < 1:
-                return "click_trend(0) — stop scrolling, click a trend."
-            if tab_clicks < 2:
-                return "After this trend, click(target='Trending') for real trends."
+                return "click_trend(0) or click_trend(1) or click_trend(2) — stop scrolling, pick a trend."
 
             # General trend engagement (within explore cluster)
-            if has_trends:
-                if likes < 5:
-                    return "scroll trend posts -> LIKE + RETWEET + QUOTE."
-                if quotes < 3:
-                    return "QUOTE a trend post with your take."
-                if retweets < 3:
-                    return "RETWEET a trend post."
-                if bookmarks < 2:
-                    return "BOOKMARK a trend post."
-                if opened < 3:
-                    return "open_tweet -> read -> reply if relevant -> like comments."
-                if profiles < 1:
-                    return "open_profile -> follow if interesting."
-                replies = self.memory.engagement_counts.get("reply", 0)
-                if replies < 1:
-                    return "reply to a trend post if high relevance."
-                if searches < 2:
-                    return "No matching trends left — search_topic('interest keyword')."
-                return "click_trend another from Explore or search again."
-            return "On Explore but no trends visible — click_trend(0) or search_topic('keyword')."
+            if likes < 4:
+                return "LIKE + REPLY to posts in trend. Don't just scroll."
+            if replies < 2:
+                return "REPLY to a post — share your opinion on the trend."
+            if quotes < 2:
+                return "QUOTE a trend post with your take."
+            if retweets < 2:
+                return "RETWEET a trend post."
+            if bookmarks < 2:
+                return "BOOKMARK a trend post for later."
+            if opened < 3:
+                return "open_tweet -> read -> like comments -> reply."
+            if profiles < 2:
+                return "open_profile on interesting people -> follow."
+            if tab_clicks < 2:
+                return "After this, click(target='Trending') for real trends."
+            if searches < 2:
+                return "No matching trends — search_topic('keyword') suggested by Mastermind."
+            return "click_trend another from Explore (different index)."
 
         # Explore cluster complete — switch back to Home
         if on_explore:
@@ -439,7 +442,7 @@ class VisionAgent:
             else:
                 dup_guard += " All indices used. Scroll down for fresh tweets."
 
-        mastermind_advice = self._mastermind_checkin(step)
+        mastermind_advice = self._mastermind_checkin(step, trends_text)
         nudge = self._priority_nudge(trends_text)
         if nudge:
             nudge = f" >>> {nudge}"
@@ -549,6 +552,11 @@ class VisionAgent:
             decision["target"] = target = inner
 
         target_lower = target.lower()
+        if target_lower == action:
+            logger.info(f"Blocked {action}(target='{target}') — LLM used action name as target")
+            rec_params = {k: v for k, v in decision.items() if k not in ("action", "reason")}
+            self.memory.record_action(action, rec_params, decision.get("reason", ""), False)
+            return True
         if action == "click" and "click_trend" in target_lower:
             idx = decision.get("tweet_index", 0)
             logger.info(f"Normalized click(target={target}) -> explore_link (LLM meant 'go to Explore')")

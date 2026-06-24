@@ -123,36 +123,102 @@ class Mastermind:
         """Legacy alias for search_web."""
         return self.search_web(query)
 
-    def advise(self, context: str, recent_actions: list[dict]) -> str:
+    def advise(self, context: str, recent_actions: list[dict], trends_text: str = "",
+               avoid_keywords: Optional[set] = None) -> str:
         actions_str = "; ".join(
-            f"{a.get('action','?')}({'ok' if a.get('success') else 'x'})"
+            f"{a.get('action','?')}[{'ok' if a.get('success') else 'x'}]"
             for a in recent_actions[-6:]
         )
-        research = self._auto_research()
+        success_count = sum(1 for a in recent_actions[-6:] if a.get("success"))
+        fail_count = sum(1 for a in recent_actions[-6:] if not a.get("success"))
+
+        recent_names = [a.get("action", "") for a in recent_actions[-6:]]
+        scroll_streak = 0
+        for n in reversed(recent_names):
+            if n in ("scroll_down", "scroll", "scroll_down_long", "scroll_up"):
+                scroll_streak += 1
+            else:
+                break
+
+        looping = len(recent_names) >= 3 and len(set(recent_names)) <= 2
+
+        blocked_trend = ""
+        if avoid_keywords and trends_text:
+            for t in trends_text.replace("Trending now: ", "").split("; "):
+                t_clean = t.strip().lower()
+                if any(kw in t_clean for kw in avoid_keywords):
+                    blocked_trend += f"WARNING: '{t}' is RESTRICTED (gov/military). AVOID.\n"
+                    break
+
+        analysis = ""
+        if blocked_trend:
+            analysis += blocked_trend
+        if fail_count >= 3:
+            analysis += f"WARNING: {fail_count}/{len(recent_actions[-6:])} recent actions FAILED. "
+        if scroll_streak >= 2:
+            analysis += f"STOP SCROLLING ({scroll_streak}x streak). "
+        if looping:
+            analysis += f"LOOP DETECTED: repeating [{', '.join(set(recent_names))}]. BREAK IT. "
+
+        research = ""
+        search_suggestion = ""
+        if blocked_trend:
+            import re as _re
+            matches = _re.findall(r"'([^']+)' is RESTRICTED", blocked_trend)
+            if matches:
+                pass
+            persona_topics = [t for t in self.persona.topics if not any(kw in t.lower() for kw in (avoid_keywords or set()))]
+            if persona_topics:
+                search_suggestion = f"search_topic('{persona_topics[0]}') for safe content."
+
+        if trends_text and not blocked_trend:
+            trend_lines = trends_text.replace("Trending now: ", "").split("; ")[:2]
+            if trend_lines:
+                query = trend_lines[0][:60]
+                research = self.search_web(query)
+
         prompt = (
             f"You are the MASTERMIND. The Analyst is mid-session.\n\n"
-            f"SESSION BRIEF (pre-set):\n{self._brief}\n\n"
+            f"SESSION BRIEF:\n{self._brief}\n\n"
             f"CURRENT STATE:\n{context}\n\n"
-            f"RECENT ACTIONS (last 6):\n{actions_str}\n\n"
+            f"RECENT ACTIONS (last 6):\n{actions_str}\n"
+            f"Success rate: {success_count}/{len(recent_actions[-6:])}\n\n"
+            f"ANALYSIS:\n{analysis}\n"
         )
+        if trends_text and not blocked_trend:
+            prompt += f"VISIBLE TRENDS:\n{trends_text[:400]}\n\n"
         if research:
-            prompt += f"WEB RESEARCH (fresh data):\n{research[:800]}\n\n"
+            prompt += f"WEB RESEARCH (current trend):\n{research[:500]}\n\n"
+        if search_suggestion:
+            prompt += f"SUGGESTION: {search_suggestion}\n\n"
         prompt += (
-            f"Give 1-2 sentence tactical advice. What should the Analyst do RIGHT NOW?\n"
-            f"Be specific — 'keep scrolling home', 'switch to Explore Trending tab', "
-            f"'click_trend(0) on AI', 'reply to the cat post', etc.\n"
-            f"Under 60 words."
+            f"INSTRUCTIONS:\n"
+            f"1. CRITICALLY evaluate the Analyst's recent actions. "
+            f"Are they following the brief? Stuck? Wasting steps?\n"
+            f"2. Say which topic to ENGAGE with or SEARCH for. "
+            f"If current trends are restricted, suggest a SAFE search topic.\n"
+            f"3. Give ONE specific action. Be concrete: "
+            f"'like(0)', 'reply(0, text)', 'search_topic(\"keyword\")', "
+            f"'click(target=\"explore_link\")', 'click_trend(0)', 'back', etc.\n"
+            f"4. Say WHY — connect it to the session goals.\n\n"
+            f"Under 80 words."
         )
+
         resp = self.llm.text_chat(
-            system_prompt="You are a strategic mastermind. Give concise real-time guidance.",
+            system_prompt="You are a critical strategist. Judge actions, give specific tactical orders.",
             user_text=prompt,
             temperature=0.6,
             max_tokens=150,
         )
+
         if resp and resp.content:
-            logger.info(f"[MASTERMIND] Advice: {resp.content.strip()[:120]}")
+            logger.info(f"[MASTERMIND] Advice: {resp.content.strip()[:150]}")
             return resp.content.strip()
         return ""
+
+    def load_brief(self) -> str:
+        """Load the current brief (set by generate_brief) or fallback."""
+        return getattr(self, "_brief", None) or self._fallback_brief()
 
     def _fallback_brief(self) -> str:
         topics = ", ".join(self.persona.topics[:5])
