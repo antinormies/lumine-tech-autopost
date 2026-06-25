@@ -17,6 +17,8 @@ VISIBLE_TEXT_MAP: dict[str, str] = {
     "retweet": "retweet_button",
     "Bookmark": "bookmark_button",
     "bookmark": "bookmark_button",
+    "Trend": "explore_link",
+    "trend": "explore_link",
     "click_trend": "explore_link",
     "click_trend(idx)": "explore_link",
     "click_trend(index)": "explore_link",
@@ -60,8 +62,8 @@ SELECTORS = {
     # Engagement
     "like_button": '[data-testid="like"]',
     "unlike_button": '[data-testid="unlike"]',
-    "retweet_button": '[data-testid="retweet"]',
-    "retweet_confirm": '[data-testid="retweetConfirm"]',
+    "retweet_button": '[data-testid="retweet"], [data-testid="repost"]',
+    "retweet_confirm": '[data-testid="retweetConfirm"], [data-testid="repostConfirm"]',
     "quote_option": '[data-testid="quote"]',
     "bookmark_button": '[data-testid="bookmark"]',
     "reply_button": '[data-testid="reply"]',
@@ -79,7 +81,9 @@ SELECTORS = {
     # Profile
     "follow_button": '[data-testid="followButton"]',
     "unfollow_button": '[data-testid="unfollowButton"]',
-    "user_name_link": '[data-testid="User-Name"]',
+    "user_name_link": '[data-testid="User-Name"] a',
+    "tweet_caret": '[data-testid="caret"]',
+    "not_interested": '[role="menuitem"]:has-text("Mute"), [role="menuitem"]:has-text("Not interested"), [role="menuitem"]:has-text("Show fewer")',
     # Trends
     "trend_item": '[data-testid="trend"]',
     "explore_trends": '//span[contains(text(), "Trends")]',
@@ -103,4 +107,5 @@ ELEMENT_DESCRIPTIONS = {
     "trend_item": "a trending topic",
     "follow_button": "the follow button",
     "user_name_link": "the tweet author name",
+    "not_interested": "mark a post as not interested",
 }

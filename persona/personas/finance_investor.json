@@ -6,7 +6,7 @@
   "tone": "casual-witty",
   "writing_style": {
     "avg_tweet_length": "short-medium",
-    "use_emojis": "sometimes",
+    "use_emojis": "never",
     "use_hashtags": "never",
     "max_hashtags": 0
   },

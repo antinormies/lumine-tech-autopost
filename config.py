@@ -5,9 +5,16 @@ load_dotenv()
 
 
 class Config:
-    # LLM Server
+    # LLM Server (Analyst)
     LLM_BASE_URL: str = os.getenv("LLM_BASE_URL", "http://localhost:8080/v1")
     LLM_MODEL: str = os.getenv("LLM_MODEL", "Qwen2.5-3B")
+    LLM_CONTEXT_SIZE: int = int(os.getenv("LLM_CONTEXT_SIZE", "2048"))
+
+    # Mastermind LLM (Strategist)
+    MASTERMIND_BASE_URL: str = os.getenv("MASTERMIND_BASE_URL", "http://localhost:8080/v1")
+    MASTERMIND_MODEL: str = os.getenv("MASTERMIND_MODEL", "Gemma 4-E3B-QAT")
+    MASTERMIND_CONTEXT_SIZE: int = int(os.getenv("MASTERMIND_CONTEXT_SIZE", "2048"))
+    MASTERMIND_CHECKIN_INTERVAL: int = int(os.getenv("MASTERMIND_CHECKIN_INTERVAL", "10"))
 
     # Twitter credentials
     TWITTER_USERNAME: str = os.getenv("TWITTER_USERNAME", "")
@@ -30,6 +37,7 @@ class Config:
     MAX_REPLIES_PER_SESSION: int = int(os.getenv("MAX_REPLIES_PER_SESSION", "10"))
     MAX_RETWEETS_PER_SESSION: int = int(os.getenv("MAX_RETWEETS_PER_SESSION", "8"))
     MAX_ENGAGEMENTS: int = int(os.getenv("MAX_ENGAGEMENTS", "30"))
+    MIN_GAP_BETWEEN_REPLIES: int = int(os.getenv("MIN_GAP_BETWEEN_REPLIES", "180"))
 
     # Persona
     DEFAULT_PERSONA: str = os.getenv("DEFAULT_PERSONA", "finance_investor")

@@ -60,7 +60,31 @@ class BrowserDriver:
         logger.info(f"Connected to existing browser at {self.page.url}")
         return self.page
 
+    @staticmethod
+    def _kill_existing_brave():
+        import subprocess
+        try:
+            result = subprocess.run(["pkill", "-f", "brave"], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                logger.info("Killed existing Brave processes")
+                time.sleep(2)
+        except Exception:
+            pass
+        # Snap confinement prevents Brave from deleting its own SingletonLock
+        # when launched again. Remove it from Python to bypass this.
+        user_data_dir = config.BROWSER_USER_DATA_DIR
+        if user_data_dir:
+            for f in ("SingletonLock", "SingletonSocket"):
+                path = os.path.join(user_data_dir, f)
+                try:
+                    if os.path.exists(path):
+                        os.remove(path)
+                        logger.info(f"Removed stale {f}")
+                except Exception as e:
+                    logger.warning(f"Could not remove {f}: {e}")
+
     def _launch_new(self) -> Page:
+        self._kill_existing_brave()
         user_data_dir = config.BROWSER_USER_DATA_DIR
         executable_path = config.BROWSER_EXECUTABLE_PATH or None
         browser_name = "Brave" if executable_path else "Chromium"
@@ -77,11 +101,30 @@ class BrowserDriver:
             launch_kwargs["executable_path"] = executable_path
 
         if user_data_dir:
-            self._context = self._pw.chromium.launch_persistent_context(
-                user_data_dir=user_data_dir,
-                **launch_kwargs,
-                viewport={"width": 1280, "height": 720},
-            )
+            try:
+                self._context = self._pw.chromium.launch_persistent_context(
+                    user_data_dir=user_data_dir,
+                    **launch_kwargs,
+                    viewport={"width": 1280, "height": 720},
+                )
+            except Exception as e:
+                err = str(e)
+                logger.warning(f"Persistent context failed (snap lock issue?): {err[:100]}")
+                logger.info("Falling back: launching without persistent context, loading cookies")
+                self._browser = self._pw.chromium.launch(**launch_kwargs)
+                self._context = self._browser.new_context(
+                    viewport={"width": 1280, "height": 720},
+                    user_agent=(
+                        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                        "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+                    ),
+                )
+                self._load_cookies(self._context)
+                self.page = self._context.new_page()
+                self._close_extra_tabs()
+                self.page.set_default_timeout(30000)
+                logger.info(f"Browser ready (fallback mode)")
+                return self.page
             self._browser = self._context.browser
             self.page = self._context.pages[0] if self._context.pages else self._context.new_page()
         else:

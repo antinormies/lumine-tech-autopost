@@ -17,6 +17,7 @@ from agent.actions import (
     like_comment,
     like_nth_tweet,
     navigate,
+    not_interested,
     open_profile,
     open_tweet,
     quote_tweet,
@@ -263,7 +264,7 @@ class TestScroll:
 class TestNavigate:
     def test_navigate(self, page):
         assert navigate(page, "https://x.com/home") is True
-        page.goto.assert_called_with("https://x.com/home", wait_until="domcontentloaded")
+        page.goto.assert_called_with("https://x.com/home", wait_until="domcontentloaded", timeout=30000)
 
 
 # ─── wait ───
@@ -495,6 +496,43 @@ class TestBookmarkNth:
         assert bookmark_nth(page, 0) is False
 
 
+# ─── not_interested ───
+
+
+class TestNotInterested:
+    def test_not_interested_success(self, page):
+        articles, caret = _make_tweet_articles()
+        menu_item = _make_locator()
+
+        def locator_side(sel):
+            if sel == SELECTORS["not_interested"]:
+                m = MagicMock()
+                m.first = menu_item
+                return m
+            m = MagicMock()
+            m.all.return_value = articles
+            return m
+
+        page.locator.side_effect = locator_side
+        with patch("time.sleep"):
+            assert not_interested(page, 0) is True
+        caret.click.assert_called_once()
+        menu_item.click.assert_called_once()
+
+    def test_not_interested_index_out_of_range(self, page):
+        articles, _ = _make_tweet_articles(n=1)
+        page.locator.return_value = MagicMock()
+        page.locator.return_value.all.return_value = articles
+        assert not_interested(page, 5) is False
+
+    def test_not_interested_exception(self, page):
+        articles, _ = _make_tweet_articles()
+        page.locator.return_value = MagicMock()
+        page.locator.return_value.all.return_value = articles
+        articles[0].locator.side_effect = Exception("fail")
+        assert not_interested(page, 0) is False
+
+
 # ─── open_tweet ───
 
 
@@ -541,7 +579,7 @@ class TestLikeComment:
         articles, _ = _make_tweet_articles()
         page.locator.return_value = MagicMock()
         page.locator.return_value.all.return_value = articles
-        articles[0].locator.side_effect = Exception("fail")
+        articles[1].locator.side_effect = Exception("fail")
         assert like_comment(page, 0) is False
 
 
@@ -614,7 +652,7 @@ class TestOpenProfile:
         page.locator.return_value = MagicMock()
         page.locator.return_value.all.return_value = articles
         assert open_profile(page, 0) is True
-        articles[0].locator.assert_called_with('[data-testid="User-Name"]')
+        articles[0].locator.assert_called_with('[data-testid="User-Name"] a')
 
     def test_open_profile_index_out_of_range(self, page):
         articles, _ = _make_tweet_articles(n=1)
@@ -710,9 +748,10 @@ class TestActionRegistry:
             "retweet", "quote", "bookmark", "compose", "cancel_compose",
             "open_tweet", "like_comment", "back", "rest",
             "open_profile", "follow", "click_trend", "search_topic",
+            "not_interested",
         }
         assert set(ACTION_REGISTRY.keys()) == expected
-        assert len(ACTION_REGISTRY) == 25
+        assert len(ACTION_REGISTRY) == 26
 
     @pytest.mark.parametrize("action_name", [
         "click", "type", "scroll_down", "scroll_up", "scroll",
@@ -721,6 +760,7 @@ class TestActionRegistry:
         "retweet", "quote", "bookmark", "compose", "cancel_compose",
         "open_tweet", "like_comment", "back", "rest",
         "open_profile", "follow", "click_trend", "search_topic",
+        "not_interested",
     ])
     def test_each_action_is_callable(self, action_name):
         handler = ACTION_REGISTRY.get(action_name)
