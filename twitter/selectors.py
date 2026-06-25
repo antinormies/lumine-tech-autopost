@@ -19,6 +19,9 @@ VISIBLE_TEXT_MAP: dict[str, str] = {
     "bookmark": "bookmark_button",
     "Trend": "explore_link",
     "trend": "explore_link",
+    "click_trend": "explore_link",
+    "click_trend(idx)": "explore_link",
+    "click_trend(index)": "explore_link",
     "Following": "home_link",
     "following": "home_link",
 }

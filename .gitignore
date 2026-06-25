@@ -6,6 +6,7 @@ venv/
 # Generated files
 twitter_cookies.json
 memory.json
+data/session.log
 *.pyc
 __pycache__/
 *.egg-info/
