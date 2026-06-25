@@ -82,13 +82,14 @@ VISION_SYSTEM_INSTRUCTION = (
     "- If no finance/forex/trading trends: search_topic instead.\n\n"
     "BEHAVIOR (follow this priority):\n"
     "⚠️ WARNING: Scrolling 3+ times without interaction = WASTING your session.\n\n"
-    "PHASE 1 — HOME FEED (main activity, spend most of your time here):\n"
+     "PHASE 1 — HOME FEED (main activity, spend most of your time here):\n"
     "1. scroll_down_long through the feed. Scroll OFTEN (every 1-2 actions).\n"
     "2. Like(N) finance/forex posts. not_interested(N) on non-finance to train the algorithm.\n"
     "3. REPLY to finance/forex posts with your analysis.\n"
     "4. open_tweet -> like comments -> reply. open_profile -> follow.\n"
     "5. RETWEET, QUOTE, BOOKMARK interesting finance posts.\n"
-    "6. Scroll some more. Keep engaging.\n\n"
+    "6. Scroll some more. Keep engaging.\n"
+    "7. Occasionally tweet(text) an original thought — share your market take if cooldown allows.\n\n"
     "PHASE 2 — SEARCH (when home feed gets stale or you want targeted content):\n"
     "7. search_topic('keyword') — e.g. search_topic('trading'), search_topic('stocks'), search_topic('saham'), search_topic('crypto'). Vary your keywords.\n"
     "8. Use SHORT keywords (1-3 words). NOT full sentences.\n"
@@ -101,9 +102,10 @@ VISION_SYSTEM_INSTRUCTION = (
     "14. Pick finance-related trends, click_trend(0), click_trend(1)...\n"
     "15. Engage with trend posts: LIKE, REPLY, RETWEET. Then go back to Home.\n"
     "16. If no finance trends, search_topic instead. Don't force trends.\n\n"
-    "PHASE 4 — ROTATE BACK:\n"
-    "17. After checking Explore, go back to Home or Search. Rotate between Home <-> Search.\n"
-    "18. Keep scrolling and engaging. Home feed + Search should be 80% of your time.\n\n"
+     "PHASE 4 — ROTATE BACK:\n"
+    "18. After checking Explore, go back to Home or Search. Rotate between Home <-> Search.\n"
+    "19. Keep scrolling and engaging. Home feed + Search should be 80% of your time.\n"
+    "20. Occasionally tweet or quote about web research from Mastermind if cooldown allows.\n\n"
     "GENERAL RULES:\n"
     "17. Post about matching trends if cooldown allows — use web research from Mastermind.\n"
     "18. Quote is NOT locked — use it freely.\n"
@@ -117,7 +119,8 @@ VISION_SYSTEM_INSTRUCTION = (
     "26. PREFER replying to finance/forex/trading posts over general buzz trending. If a trend isn't finance-related, scroll past it and find one that is.\n"
     "27. When on SEARCH RESULTS: STAY there. scroll_down_long through results. LIKE, REPLY, open_tweet, open_profile. Do NOT click trends or go to Explore.\n"
     "28. Use not_interested(N) on non-finance posts to train the algorithm. Like(N) on finance posts.\n"
-    "29. Finance keywords: forex, stocks, trading, crypto, investment, economy, market, bank, fintech.\n"
+    "29. NO EMOJIS/EMOTICONS in any content. Use character expressions instead (e.g. :), :(, :D, ;), :p).\n"
+    "30. Finance keywords: forex, stocks, trading, crypto, investment, economy, market, bank, fintech.\n"
     "    Also Indonesian finance terms: saham, investasi, reksadana, ihsg, bursa, rupiah.\n\n"
     "Respond ONLY JSON:\n"
     '{"action": "...", "reason": "...", "target": "...", "text": "...", "tweet_index": 0, "amount": 600, "seconds": 5}'
@@ -127,6 +130,7 @@ VISION_SYSTEM_INSTRUCTION = (
 class VisionAgent:
     def __init__(self, page: Page, llm: LLMClient, system_prompt: str, mastermind_brief: str = "", mastermind: Optional[Mastermind] = None):
         self.page = page
+        self._context = page.context
         self.llm = llm
         self.memory = Memory()
         self.mastermind = mastermind
@@ -217,7 +221,7 @@ class VisionAgent:
         if "/status/" in url:
             return "📍 ACTIVE: Tweet detail"
         if "/search?" in url:
-            return "📍 ACTIVE: Search / Trend results"
+            return "📍 ACTIVE: Search / Trend results — ONLY scroll, like, reply, retweet, quote, bookmark, open_tweet, open_profile, follow, back, search_topic. NO trends/clicks."
         if self._on_own_profile():
             return "📍 ACTIVE: Own profile — DO NOT engage your own posts"
         if url.startswith("https://x.com/") and url.count("/") == 2:
@@ -339,6 +343,8 @@ class VisionAgent:
                 return "REPLY to a finance/forex post in results — share your analysis."
             if quotes < 1:
                 return "QUOTE a post with your insight."
+            if self.memory.can_tweet(1.0):
+                return "Got an original take? tweet(text) to share. Else scroll more or search_topic('another keyword'). Stay on search."
             return "scroll more or search_topic('another keyword'). Stay on search."
 
         # Phase 1: Home feed — cluster minimum 25 steps, scroll + engage heavily
@@ -364,7 +370,11 @@ class VisionAgent:
                     return "BOOKMARK a post for later."
                 if likes < 8:
                     return "scroll more -> like(N) finance posts. Keep engaging home feed."
+                if self.memory.can_tweet(1.0):
+                    return "Got an insight? tweet(text) to share your take, or scroll more."
                 return "scroll_down_long -> keep scrolling home feed. Like and reply to finance posts."
+            if self.memory.can_tweet(1.0):
+                return f"Home cluster done ({self._phase_steps}/25). Consider tweet(text) if you have a hot take, or search_topic/explore."
             return f"Home cluster done ({self._phase_steps}/25). Try search_topic('keyword') or click(target='explore_link') for a change."
 
         # Phase 3: Explore — periodic trend check, less time here
@@ -413,6 +423,8 @@ class VisionAgent:
             return "Follow someone interesting."
         if recent_fails >= 3:
             return "STOP clicking. Scroll and like instead."
+        if self.memory.can_tweet(1.0) and total > 20:
+            return "Share a thought? tweet(text) to post. Else scroll and engage."
         if eng < max_eng and total > 6:
             return "scroll_down_long or search_topic('keyword')."
         return "scroll_down_long through feed. Find finance posts to engage with."
@@ -472,6 +484,9 @@ class VisionAgent:
         last_3 = [a["action"] for a in self.memory.actions[-3:]]
 
         trends_text = self._extract_trends()
+        url_lower = url.lower()
+        if "/search?" in url_lower:
+            trends_text = ""  # no trends on search — LLM should focus on results
         compose_open = self._is_compose_open()
         page_ctx = self._page_context()
 
@@ -596,12 +611,31 @@ class VisionAgent:
             logger.warning(f"Failed to parse action JSON: {e}")
             return None
 
+    def _recover_page(self) -> bool:
+        try:
+            logger.info("Page may have crashed — creating new page")
+            try:
+                if not self.page.is_closed():
+                    self.page.close()
+            except Exception:
+                pass
+            self.page = self._context.new_page()
+            self.page.set_default_timeout(30000)
+            self.page.goto("https://x.com/home", wait_until="domcontentloaded", timeout=20000)
+            time.sleep(3)
+            logger.info("Page recovered successfully")
+            return True
+        except Exception as e:
+            logger.warning(f"Page recovery failed: {e}")
+        return False
+
     def _page_alive(self) -> bool:
         try:
             self.page.url
             return True
         except Exception:
-            return False
+            logger.warning("Page not alive — attempting recovery")
+            return self._recover_page()
 
     def _safe_url(self) -> str:
         try:
@@ -947,16 +981,6 @@ class VisionAgent:
             decision["text"] = result
             logger.info(f"Mastermind APPROVED post: {result[:100]}")
 
-        success = execute_action(self.page, action, params)
-
-        if success and action == "click_trend" and tweet_idx is not None:
-            self._used_trend_indices.add(int(tweet_idx))
-            logger.info(f"Tracked used trend index {tweet_idx} ({len(self._used_trend_indices)} used)")
-
-        self.memory.record_action(action, params, decision.get("reason", ""), success)
-        if not success:
-            logger.info(f"Action '{action}' failed — retrying once")
-            time.sleep(random.uniform(1, 2))
         # Finance gate: block engagement on non-finance posts
         FINANCE_CHECKED = {"like", "reply", "retweet", "quote", "bookmark"}
         if action in FINANCE_CHECKED and tweet_idx is not None:
@@ -974,6 +998,16 @@ class VisionAgent:
                 return True
 
         success = execute_action(self.page, action, params)
+
+        if success and action == "click_trend" and tweet_idx is not None:
+            self._used_trend_indices.add(int(tweet_idx))
+            logger.info(f"Tracked used trend index {tweet_idx} ({len(self._used_trend_indices)} used)")
+
+        self.memory.record_action(action, params, decision.get("reason", ""), success)
+        if not success:
+            logger.info(f"Action '{action}' failed — retrying once")
+            time.sleep(random.uniform(1, 2))
+            success = execute_action(self.page, action, params)
             if success:
                 logger.info(f"Retry of '{action}' succeeded")
                 self.memory.record_action(action, params, "retry after failure", True)
@@ -991,7 +1025,13 @@ class VisionAgent:
         return True
 
     def run_session(self, max_steps: int = 30):
-        self.page.goto("https://x.com/home", wait_until="domcontentloaded")
+        try:
+            self.page.goto("https://x.com/home", wait_until="domcontentloaded", timeout=30000)
+        except Exception as e:
+            logger.warning(f"Initial goto failed: {e}")
+            if not self._recover_page():
+                logger.error("Could not recover page at session start")
+                return
         time.sleep(4)
         logger.info("Starting vision agent session")
 

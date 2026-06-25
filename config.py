@@ -8,10 +8,12 @@ class Config:
     # LLM Server (Analyst)
     LLM_BASE_URL: str = os.getenv("LLM_BASE_URL", "http://localhost:8080/v1")
     LLM_MODEL: str = os.getenv("LLM_MODEL", "Qwen2.5-3B")
+    LLM_CONTEXT_SIZE: int = int(os.getenv("LLM_CONTEXT_SIZE", "2048"))
 
     # Mastermind LLM (Strategist)
     MASTERMIND_BASE_URL: str = os.getenv("MASTERMIND_BASE_URL", "http://localhost:8080/v1")
     MASTERMIND_MODEL: str = os.getenv("MASTERMIND_MODEL", "Gemma 4-E3B-QAT")
+    MASTERMIND_CONTEXT_SIZE: int = int(os.getenv("MASTERMIND_CONTEXT_SIZE", "2048"))
     MASTERMIND_CHECKIN_INTERVAL: int = int(os.getenv("MASTERMIND_CHECKIN_INTERVAL", "10"))
 
     # Twitter credentials

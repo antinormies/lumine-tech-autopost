@@ -264,7 +264,7 @@ class TestScroll:
 class TestNavigate:
     def test_navigate(self, page):
         assert navigate(page, "https://x.com/home") is True
-        page.goto.assert_called_with("https://x.com/home", wait_until="domcontentloaded")
+        page.goto.assert_called_with("https://x.com/home", wait_until="domcontentloaded", timeout=30000)
 
 
 # ─── wait ───

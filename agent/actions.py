@@ -113,9 +113,13 @@ def scroll_up(page: Page, amount: int = 600) -> bool:
 
 def navigate(page: Page, url: str) -> bool:
     logger.info(f"Navigating to {url}")
-    page.goto(url, wait_until="domcontentloaded")
-    time.sleep(3)
-    return True
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        time.sleep(3)
+        return True
+    except Exception as e:
+        logger.warning(f"Navigate failed: {e}")
+        return False
 
 
 def wait(seconds: int) -> bool:
@@ -211,7 +215,7 @@ def retweet_nth(page: Page, index: int = 0) -> bool:
     try:
         article.scroll_into_view_if_needed(timeout=3000)
         time.sleep(random.uniform(0.3, 0.8))
-        rt_btn = article.locator(SELECTORS["retweet_button"])
+        rt_btn = article.locator(SELECTORS["retweet_button"]).first
         if not rt_btn.is_visible(timeout=2000):
             logger.warning(f"Retweet button not visible on tweet #{index}")
             return False
@@ -236,7 +240,7 @@ def quote_tweet(page: Page, index: int, text: str) -> bool:
         article.scroll_into_view_if_needed(timeout=3000)
         time.sleep(random.uniform(0.3, 0.8))
 
-        rt_btn = article.locator(SELECTORS["retweet_button"])
+        rt_btn = article.locator(SELECTORS["retweet_button"]).first
         if not rt_btn.is_visible(timeout=2000):
             logger.warning(f"Retweet/repost button not visible on tweet #{index}")
             return False
@@ -255,7 +259,7 @@ def quote_tweet(page: Page, index: int, text: str) -> bool:
                     time.sleep(random.uniform(1, 2))
                 else:
                     logger.warning("Quote option not found, falling back to retweet")
-                    retweet_btn = page.locator(SELECTORS["retweet_button"])
+                    retweet_btn = article.locator(SELECTORS["retweet_button"]).first
                     if retweet_btn.is_visible(timeout=1000):
                         retweet_btn.click(force=True)
                         logger.info(f"Retweeted tweet #{index} (quote unavailable)")

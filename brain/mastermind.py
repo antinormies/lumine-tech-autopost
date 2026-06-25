@@ -1,3 +1,4 @@
+import random
 import re
 import time
 from typing import Optional
@@ -17,6 +18,7 @@ class Mastermind:
         self.llm = LLMClient(
             base_url=config.MASTERMIND_BASE_URL,
             model=config.MASTERMIND_MODEL,
+            context_size=config.MASTERMIND_CONTEXT_SIZE,
         )
         logger.info(f"Mastermind online — strategist: {config.MASTERMIND_MODEL}")
 
@@ -171,9 +173,13 @@ class Mastermind:
         if trends_text and not blocked_trend:
             trend_lines = trends_text.replace("Trending now: ", "").split("; ")[:2]
             if trend_lines:
-                # Extract actual trend title (first line before metadata/location)
                 parts = trend_lines[0].strip().split("\n")
-                query = parts[0].strip()[:60]
+                query = ""
+                for p in parts:
+                    p = p.strip()
+                    if p and not p.lower().startswith("trending in"):
+                        query = p[:60]
+                        break
                 if query:
                     research = self.search_web(query)
 
@@ -200,7 +206,8 @@ class Mastermind:
             f"3. Give ONE specific action. Be concrete: "
             f"'like(0)', 'reply(0, text)', 'search_topic(\"keyword\")', "
             f"'click(target=\"explore_link\")', 'click_trend(0)', 'back', etc.\n"
-            f"4. Say WHY — connect it to the session goals.\n\n"
+            f"4. Say WHY — connect it to the session goals.\n"
+            f"5. Never use emojis/emoticons in suggestions.\n\n"
             f"Under 80 words."
         )
 
@@ -227,7 +234,7 @@ class Mastermind:
             f"2. Explore trending topics, focus on interest-matching content\n"
             f"3. Like, retweet, reply naturally\n\n"
             f"INTERESTS: {self.persona.description}\n"
-            f"WARNINGS: Avoid military/politics. Never reveal bot identity."
+            f"WARNINGS: Avoid military/politics. Never reveal bot identity. NO emojis/emoticons in any text."
         )
         return self._brief
 
@@ -241,7 +248,15 @@ class Mastermind:
         """
         # Use first trend as research topic
         trend_lines = trends_text.replace("Trending now: ", "").split("; ") if trends_text else []
-        topic = trend_lines[0][:100] if trend_lines else (self.persona.topics[0] if self.persona.topics else "finance")
+        topic = ""
+        if trend_lines:
+            for part in trend_lines[0].split("\n"):
+                p = part.strip()
+                if p and not p.lower().startswith("trending in"):
+                    topic = p[:100]
+                    break
+        if not topic:
+            topic = self.persona.topics[0] if self.persona.topics else "forex"
 
         # Check restricted keywords
         restricted = ""
@@ -281,6 +296,11 @@ class Mastermind:
             f"1. Evaluate: is this topic relevant to the persona's interests (finance/forex/trading)?\n"
             f"2. Is it safe (not military/govt/NSFW)?\n"
             f"3. Is there enough context to write something valuable?\n\n"
+            f"RULES:\n"
+            f"- NO emojis/emoticons. Use character expressions like :), :(, :D, ;), :p instead.\n"
+            f"- NO hashtags or @mentions.\n"
+            f"- Positive framing. Match language of the posts.\n"
+            f"- Write as a finance/investor persona, not a bot.\n\n"
             f"DECIDE:\n"
             f"- If YES to all: WRITE the EXACT tweet text the Analyst must post.\n"
             f"  Format: APPROVED: [exact tweet text — max 280 chars. Follow persona tone + rules.]\n\n"
@@ -320,8 +340,9 @@ class Mastermind:
         return True, content
 
     def _best_do_fallback(self, topic: str) -> str:
-        topics = ", ".join(self.persona.topics[:3])
-        return f"search_topic('{topics.split(', ')[0]}') for relevant content."
+        keywords = ["forex", "trading", "stocks", "saham", "investasi", "crypto", "bitcoin", "gold", "rupiah", "IHSG"]
+        kw = random.choice(keywords)
+        return f"search_topic('{kw}') for relevant finance content."
 
     def approve_reply(self, post_text: str, author: str, analyst_context: str,
                       avoid_keywords: Optional[set] = None) -> tuple[bool, str]:
@@ -367,6 +388,7 @@ class Mastermind:
             f"- If YES: APPROVED: [exact reply text — under 200 chars. Natural, human, no hashtags.]\n"
             f"- If NO: REJECTED: [reason]. BEST-TO-DO: [specific action like search_topic('keyword') or click(target='...') or like(0)]\n\n"
             f"CRITICAL:\n"
+            f"- NO emojis/emoticons. Use character expressions like :), :(, :D, ;), :p instead.\n"
             f"- Reply directly to the post content — don't change the subject.\n"
             f"- Match language (Bahasa for Bahasian posts, English for English posts).\n"
             f"- Positive framing. No hashtags or @mentions.\n"
