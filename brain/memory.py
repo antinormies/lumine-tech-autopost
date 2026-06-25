@@ -5,7 +5,7 @@ from collections import Counter
 from pathlib import Path
 
 
-ENGAGEMENT_ACTIONS = {"like", "reply", "retweet", "bookmark", "tweet"}
+ENGAGEMENT_ACTIONS = {"like", "reply", "retweet", "bookmark", "tweet", "quote", "follow", "not_interested"}
 POST_ACTIONS = {"tweet", "compose", "post"}
 PERSISTENCE_FILE = Path(__file__).resolve().parent.parent / "data" / "persistence.json"
 

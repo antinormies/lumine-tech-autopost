@@ -9,12 +9,17 @@ from playwright.sync_api import Page
 
 from agent.actions import execute_action
 from brain.mastermind import Mastermind
+from utils.finance_words import is_finance_related
 
 MILITARY_GOVT_KEYWORDS = {
     "militer", "tentara", "angkatan bersenjata", "polisi", "tni", "polri",
     "pemerintah", "politik", "presiden", "menteri", "kementerian", "dpr", "mpr",
     "army", "military", "government", "politics", "president", "minister",
-    "soldier", "war", "senjata", "nuklir", "rudal", "perang", "prajurit", "mbg",
+    "soldier", "war", "senjata", "nuklir", "rudal", "perang", "prajurit", "mbg", "prabowo",
+    # NSFW / adult content
+    "nsfw", "naked", "nude", "lust", "sexy", "hot", "porn", "sex", "seks",
+    "telanjang", "bugil", "berahi", "nafsu", "bikini", "onlyfans",
+    "vulgar", "erotis", "erotic", "intim", "intimate", "porno",
 }
 from brain.memory import Memory
 from config import config
@@ -37,6 +42,7 @@ VISION_SYSTEM_INSTRUCTION = (
     "- like_comment(tweet_index) — like a comment\n"
     "- reply(tweet_index, text) — reply to a post\n"
     "- bookmark(tweet_index) — save for later\n"
+    "- not_interested(tweet_index) — mark as 'not interested' to train algorithm away from non-finance\n"
     "- open_profile(tweet_index) — click user name to see their profile\n"
     "- follow — click Follow button on a profile page\n"
     "- click_trend(idx) — click a trend name from sidebar or Explore (0=first visible). Use like: click_trend with tweet_index=0\n"
@@ -52,7 +58,8 @@ VISION_SYSTEM_INSTRUCTION = (
     "- Retweet or tweet something random and fun, not just finance.\n"
     "- NEVER say you are a bot, AI, or automated system. Never reveal your true nature.\n"
     "- NEVER use hashtags (#) or @mentions. Write naturally like a human.\n"
-    "- AVOID topics related to military or government/politics.\n"
+    "- AVOID topics related to military, government/politics, NSFW, or adult content.\n"
+    "- PREFER engaging with FINANCE, FOREX, TRADING, and INVESTMENT posts.\n"
     "- Always frame responses POSITIVELY. Even for negative news, focus on silver linings, opportunities, and lessons.\n"
     "- Never doom-and-gloom.\n\n"
     "LANGUAGE RULES:\n"
@@ -66,43 +73,52 @@ VISION_SYSTEM_INSTRUCTION = (
     "3. If you already tweeted recently, you can still quote or reply.\n\n"
     "COMPOSE RULE:\n"
     "- If compose dialog is open: ONLY tweet/compose or cancel_compose allowed.\n\n"
-    "TRENDS (your MAIN activity):\n"
-    "- Your PRIMARY job is to explore trending topics and engage with trend posts.\n"
-    "- CRITICAL: NEVER click on military or government-related trends. Skip them entirely.\n"
-    "- The right sidebar 'What's happening' is algorithmic personalization (not real trends). Use it RARELY.\n"
+    "TRENDS:\n"
+    "- Periodically check Explore for trending topics, but don't spend all your time there.\n"
+    "- CRITICAL: NEVER click on military, government, or NSFW/adult trends. Skip them entirely.\n"
+    "- CRITICAL: PREFER finance, forex, trading, and investment posts above all else.\n"
     "- On Explore page there are two tabs: 'For you' (personalized trends) and 'Trending' (real trends).\n"
     "- click(target='For you') or click(target='Trending') to switch tabs on Explore.\n"
-    "- On each tab: scroll_down_long, pick a trend matching interests, click_trend, engage.\n\n"
+    "- If no finance/forex/trading trends: search_topic instead.\n\n"
     "BEHAVIOR (follow this priority):\n"
-    "⚠️ WARNING: Scrolling 3+ times without interaction = WASTING your session.\n"
-    "⚠️ WARNING: After 4 total actions, if you haven't visited Explore, you WILL be auto-redirected there.\n\n"
-    "PHASE 1 — HOME FEED (brief warmup, max 3 actions):\n"
-    "1. Scroll a little. Like 1-2 posts. Then IMMEDIATELY go to Explore.\n\n"
-    "PHASE 2 — EXPLORE 'FOR YOU' TAB (main activity):\n"
-    "2. click(target='explore_link') to go to Explore.\n"
-    "3. click(target='For you') to see personalized trends.\n"
-    "4. Pick a trend — vary indices (click_trend(0), click_trend(1), click_trend(2)...).\n"
-    "5. On trend results: LIKE + REPLY + RETWEET + BOOKMARK + QUOTE posts. REPLY often with your opinion.\n"
-    "6. open_tweet -> reply -> like comments. open_profile -> follow.\n"
-    "7. back to Explore. Pick next trend (different index). Repeat.\n"
-    "8. After matching trends exhausted, switch to Trending tab.\n\n"
-    "PHASE 3 — EXPLORE 'TRENDING' TAB:\n"
-    "9. click(target='Trending') for real trending topics.\n"
-    "10. Vary trend indices (click_trend(0), click_trend(1)...). LIKE + REPLY + RETWEET posts.\n"
-    "11. First pick interest-matching trends. Then any specific non-military/govt trend.\n\n"
-    "PHASE 4 — SEARCH (when trends don't match):\n"
-    "12. If no trends match your interests, search_topic('interest keyword').\n"
-    "13. Try keywords suggested by Mastermind, or 'AI', 'stocks', 'tech', 'music', etc.\n"
-    "14. scroll_down_long through results. LIKE + REPLY + RETWEET + BOOKMARK + QUOTE.\n"
-    "15. open_tweet -> reply -> like comments. open_profile -> follow.\n"
-    "16. Try different search terms to find fresh content. REPLY often.\n\n"
+    "⚠️ WARNING: Scrolling 3+ times without interaction = WASTING your session.\n\n"
+    "PHASE 1 — HOME FEED (main activity, spend most of your time here):\n"
+    "1. scroll_down_long through the feed. Scroll OFTEN (every 1-2 actions).\n"
+    "2. Like(N) finance/forex posts. not_interested(N) on non-finance to train the algorithm.\n"
+    "3. REPLY to finance/forex posts with your analysis.\n"
+    "4. open_tweet -> like comments -> reply. open_profile -> follow.\n"
+    "5. RETWEET, QUOTE, BOOKMARK interesting finance posts.\n"
+    "6. Scroll some more. Keep engaging.\n\n"
+    "PHASE 2 — SEARCH (when home feed gets stale or you want targeted content):\n"
+    "7. search_topic('keyword') — e.g. search_topic('trading'), search_topic('stocks'), search_topic('saham'), search_topic('crypto'). Vary your keywords.\n"
+    "8. Use SHORT keywords (1-3 words). NOT full sentences.\n"
+    "9. scroll_down_long through search results. LIKE + REPLY + RETWEET + BOOKMARK + QUOTE.\n"
+    "10. STAY on search results. Do NOT go to Explore/trends from search.\n"
+    "11. open_tweet -> reply -> like comments. open_profile -> follow.\n"
+    "12. Try different search terms to find fresh content. REPLY often.\n\n"
+    "PHASE 3 — EXPLORE (periodic trend check, less frequent):\n"
+    "13. Occasionally click(target='explore_link') to check what's trending.\n"
+    "14. Pick finance-related trends, click_trend(0), click_trend(1)...\n"
+    "15. Engage with trend posts: LIKE, REPLY, RETWEET. Then go back to Home.\n"
+    "16. If no finance trends, search_topic instead. Don't force trends.\n\n"
+    "PHASE 4 — ROTATE BACK:\n"
+    "17. After checking Explore, go back to Home or Search. Rotate between Home <-> Search.\n"
+    "18. Keep scrolling and engaging. Home feed + Search should be 80% of your time.\n\n"
     "GENERAL RULES:\n"
     "17. Post about matching trends if cooldown allows — use web research from Mastermind.\n"
     "18. Quote is NOT locked — use it freely.\n"
-    "19. REPLY to posts with your opinion — do this often. Reply is the most engaging action.\n"
-    "20. Use 'rest' after ~150 actions. Then restart from Phase 2.\n"
-    "21. NEVER engage same tweet_index twice.\n"
-    "22. Click different trend indices (0, 1, 2, 3...) — don't always pick the first.\n\n"
+    "19. REPLY to posts with your opinion — do this often. Reply is the most engaging action. PREFER replying to finance/forex/trading posts over buzz trending.\n"
+    "20. NEVER engage your own posts. If you see your own content, skip it. Do not like/retweet/reply/quote it.\n"
+    "21. Reply freely — no cooldown between comments.\n"
+    "22. Use 'rest' after ~150 actions. Then restart from Phase 2.\n"
+    "23. NEVER engage same tweet_index twice.\n"
+    "24. Click different trend indices (0, 1, 2, 3...) — don't always pick the first.\n"
+    "25. search_topic is a GREAT way to find content. Vary keywords: trading, stocks, saham, investasi, crypto, gold, etc.\n"
+    "26. PREFER replying to finance/forex/trading posts over general buzz trending. If a trend isn't finance-related, scroll past it and find one that is.\n"
+    "27. When on SEARCH RESULTS: STAY there. scroll_down_long through results. LIKE, REPLY, open_tweet, open_profile. Do NOT click trends or go to Explore.\n"
+    "28. Use not_interested(N) on non-finance posts to train the algorithm. Like(N) on finance posts.\n"
+    "29. Finance keywords: forex, stocks, trading, crypto, investment, economy, market, bank, fintech.\n"
+    "    Also Indonesian finance terms: saham, investasi, reksadana, ihsg, bursa, rupiah.\n\n"
     "Respond ONLY JSON:\n"
     '{"action": "...", "reason": "...", "target": "...", "text": "...", "tweet_index": 0, "amount": 600, "seconds": 5}'
 )
@@ -124,6 +140,34 @@ class VisionAgent:
         self._compose_streak = 0
         self._phase = "home"
         self._phase_steps = 0
+        self._used_trend_indices: set[int] = set()
+        self._mastermind_directive = ""
+        self._own_username: str | None = None
+        try:
+            link = page.locator('[data-testid="AppTabBar_Profile_Link"]')
+            href = link.get_attribute("href")
+            if href:
+                self._own_username = href.strip("/")
+                logger.info(f"[ANALYST] Own username: {self._own_username}")
+        except Exception:
+            pass
+
+    def _on_own_profile(self) -> bool:
+        if not self._own_username:
+            return False
+        url = self._safe_url()
+        path = url.split("?")[0].rstrip("/")
+        return path == f"https://x.com/{self._own_username}"
+
+    def _search_options(self, count: int = 2) -> str:
+        keywords = random.sample([
+            "forex", "trading", "stocks", "crypto", "bitcoin", "investment",
+            "saham", "investasi", "reksadana", "ihsg", "idx",
+            "gold", "oil", "interest rates", "inflation",
+            "stock market", "economic outlook", "market analysis",
+            "commodities", "emerging markets",
+        ], min(count, 3))
+        return " or ".join(f"search_topic('{k}')" for k in keywords)
 
     def _is_compose_open(self) -> bool:
         try:
@@ -174,8 +218,10 @@ class VisionAgent:
             return "📍 ACTIVE: Tweet detail"
         if "/search?" in url:
             return "📍 ACTIVE: Search / Trend results"
+        if self._on_own_profile():
+            return "📍 ACTIVE: Own profile — DO NOT engage your own posts"
         if url.startswith("https://x.com/") and url.count("/") == 2:
-            return "📍 ACTIVE: Profile page"
+            return "📍 ACTIVE: Other profile page"
         if "/home" in url or url in ("https://x.com", "https://twitter.com", ""):
             return "📍 ACTIVE: Home feed"
         if "explore" in url:
@@ -213,6 +259,22 @@ class VisionAgent:
             logger.info(f"[MASTERMIND] Check-in at step {step}: {advice[:120]}")
         return self._mastermind_advice
 
+    def _feed_exhausted(self) -> bool:
+        try:
+            markers = [
+                'text=You\'re all caught up',
+                'text=You\'re caught up',
+                'text=No more posts',
+                'text=Show newer posts',
+                '[data-testid="empty_state"]',
+            ]
+            for m in markers:
+                if self.page.locator(m).first.is_visible(timeout=1000):
+                    return True
+        except Exception:
+            pass
+        return False
+
     def _priority_nudge(self, trends_text: str = "") -> str:
         max_eng = config.MAX_ENGAGEMENTS
         eng = self.memory.total_engagements()
@@ -222,6 +284,8 @@ class VisionAgent:
         quotes = self.memory.engagement_counts.get("quote", 0)
         bookmarks = self.memory.engagement_counts.get("bookmark", 0)
         follows = self.memory.engagement_counts.get("follow", 0)
+        replies = self.memory.engagement_counts.get("reply", 0)
+        not_interested_count = self.memory.engagement_counts.get("not_interested", 0)
         opened = sum(1 for a in self.memory.actions if a["action"] == "open_tweet")
         profiles = sum(1 for a in self.memory.actions if a["action"] == "open_profile")
         recent_fails = sum(1 for a in self.memory.actions[-4:] if not a.get("success"))
@@ -246,68 +310,99 @@ class VisionAgent:
 
         streak = self._scroll_streak()
         if streak >= 2:
+            exhausted = self._feed_exhausted()
+            if exhausted:
+                if on_explore:
+                    return f"FEED EXHAUSTED ({streak}x scrolls). click_trend(0) or try a different tab."
+                return f"FEED EXHAUSTED ({streak}x scrolls). {self._search_options()} or click(target='explore_link') for fresh content."
             if on_explore:
-                return f"STOP SCROLLING ({streak}x). click_trend(0) or click_trend(1) NOW."
-            return f"STOP SCROLLING ({streak}x). like(0) or reply(0) NOW."
+                free = [i for i in range(8) if i not in self._used_trend_indices]
+                if not free:
+                    return f"STOP SCROLLING ({streak}x). scroll_down_long to load more trends."
+                return f"STOP SCROLLING ({streak}x). click_trend({free[0]}) NOW."
+            return f"STOP SCROLLING ({streak}x). like(0) or {self._search_options(1)}."
 
         has_trends = bool(trends_text.strip())
 
-        # Phase 1: Home feed — cluster minimum 10 steps
-        if not on_explore:
-            if self._phase_steps < 10:
-                if likes < 3:
-                    return "scroll_down_long + LIKE + REPLY to interesting posts."
-                if replies < 1:
-                    return "REPLY to a post you see — share your opinion."
-                if opened < 2:
-                    return "open_tweet -> LIKE comments -> reply."
-                if profiles < 1:
-                    return "open_profile on interesting people."
-                if quotes < 1:
-                    return "QUOTE a post with your take."
-            return f"Home cluster done ({self._phase_steps}/10). SWITCH TO EXPLORE — click(target='explore_link') NOW."
-
-        # On Explore — Phases 2/3 — cluster minimum 15 steps
-        if on_explore and self._phase_steps < 15:
-            if tab_clicks < 1 and trend_clicks < 1:
-                return "On Explore — click a tab first (click(target='For you') or click(target='Trending'))."
-            if trend_clicks < 1:
-                return "click_trend(0) or click_trend(1) or click_trend(2) — stop scrolling, pick a trend."
-
-            # General trend engagement (within explore cluster)
-            if likes < 4:
-                return "LIKE + REPLY to posts in trend. Don't just scroll."
-            if replies < 2:
-                return "REPLY to a post — share your opinion on the trend."
-            if quotes < 2:
-                return "QUOTE a trend post with your take."
-            if retweets < 2:
-                return "RETWEET a trend post."
-            if bookmarks < 2:
-                return "BOOKMARK a trend post for later."
-            if opened < 3:
-                return "open_tweet -> read -> like comments -> reply."
-            if profiles < 2:
+        # Search results: stay and engage, don't go back to trending
+        on_search_results = "/search?" in self._safe_url()
+        if on_search_results:
+            if not_interested_count < 2:
+                return "STAY on search results. not_interested(N) on non-finance posts, like(N) on finance/forex."
+            if likes < 2:
+                return "STAY on search results. Find a finance/forex post -> like(N). like(0) if it's finance, else not_interested(0)."
+            if opened < 1:
+                return "open_tweet -> like comments -> reply."
+            if profiles < 1:
                 return "open_profile on interesting people -> follow."
-            if tab_clicks < 2:
-                return "After this, click(target='Trending') for real trends."
-            if searches < 2:
-                return "No matching trends — search_topic('keyword') suggested by Mastermind."
-            return "click_trend another from Explore (different index)."
+            if replies < 1:
+                return "REPLY to a finance/forex post in results — share your analysis."
+            if quotes < 1:
+                return "QUOTE a post with your insight."
+            return "scroll more or search_topic('another keyword'). Stay on search."
 
-        # Explore cluster complete — switch back to Home
+        # Phase 1: Home feed — cluster minimum 25 steps, scroll + engage heavily
+        if not on_explore:
+            if self._phase_steps < 25:
+                if not_interested_count < 5:
+                    return "scroll_down_long -> not_interested(N) on non-finance, like(N) on finance. Scroll between posts."
+                if likes < 5:
+                    return "scroll_down_long -> like(N) finance/forex posts. Scroll past non-finance or not_interested(N)."
+                if replies < 2:
+                    return "REPLY to a finance post — share your analysis. Scroll and find one."
+                if opened < 3:
+                    return "open_tweet -> like comments -> reply. Then scroll more."
+                if quotes < 2:
+                    return "QUOTE a finance post with your take."
+                if searches < 2:
+                    return f"search_topic('keyword') — {self._search_options(1)}. Vary your searches."
+                if profiles < 2:
+                    return "open_profile on interesting people -> follow."
+                if retweets < 2:
+                    return "RETWEET a finance post."
+                if bookmarks < 2:
+                    return "BOOKMARK a post for later."
+                if likes < 8:
+                    return "scroll more -> like(N) finance posts. Keep engaging home feed."
+                return "scroll_down_long -> keep scrolling home feed. Like and reply to finance posts."
+            return f"Home cluster done ({self._phase_steps}/25). Try search_topic('keyword') or click(target='explore_link') for a change."
+
+        # Phase 3: Explore — periodic trend check, less time here
+        if on_explore and self._phase_steps < 10:
+            if tab_clicks < 1 and trend_clicks < 1:
+                return "Quick check: click(target='For you') or click(target='Trending') for trends."
+            if trend_clicks < 1:
+                free = [i for i in range(8) if i not in self._used_trend_indices]
+                if not free:
+                    return "scroll_down_long to load more trends, then click one."
+                return f"click_trend({free[0]}) — pick a trend quickly."
+            if not_interested_count < 3 and likes > 1:
+                return "not_interested(N) on non-finance trend posts."
+            if likes < 3:
+                return "like(N) on a FINANCE trend post. Quick check."
+            if replies < 1:
+                return "REPLY to a finance/forex trend post."
+            if quotes < 1:
+                return "QUOTE a trend post."
+            if searches < 1:
+                return "search_topic('keyword') to find finance content after trends."
+            return "Done with trends. click(target='home_link') to go back to Home or search_topic()."
+
+        # Explore cluster complete — switch back to Home or Search
         if on_explore:
-            return f"Explore cluster done ({self._phase_steps}/15). SWITCH BACK TO HOME — click(target='home_link') NOW."
+            return f"Explore done ({self._phase_steps}/10). Go back Home — click(target='home_link') or search_topic('keyword')."
 
         # Fallback engagement nudges (no trends visible)
         if eng < max_eng and total < 5:
             return "scroll_down_long + like to warm up."
-        if explore_visits < 1:
-            return "click(target='explore_link') to see trends."
-        if likes < 3 and eng < max_eng:
-            return "Like tweets in feed."
+        if total > 8 and searches < 1:
+            return f"{self._search_options()} for targeted finance content."
+        if likes < 5 and eng < max_eng:
+            return "Scroll and like finance posts in feed."
         if quotes < 1 and eng < max_eng:
             return "QUOTE a post."
+        if replies < 1 and eng < max_eng:
+            return "REPLY to a finance post."
         if retweets < 1 and eng < max_eng:
             return "Retweet something."
         if opened < 2 and eng < max_eng:
@@ -319,10 +414,8 @@ class VisionAgent:
         if recent_fails >= 3:
             return "STOP clicking. Scroll and like instead."
         if eng < max_eng and total > 6:
-            return "Click Explore or sidebar trends."
-        if searches < 1 and total > 10:
-            return "search_topic('something interesting') for fresh content."
-        return ""
+            return "scroll_down_long or search_topic('keyword')."
+        return "scroll_down_long through feed. Find finance posts to engage with."
 
     def _extract_trends(self) -> str:
         try:
@@ -443,6 +536,12 @@ class VisionAgent:
                 dup_guard += " All indices used. Scroll down for fresh tweets."
 
         mastermind_advice = self._mastermind_checkin(step, trends_text)
+
+        directive_text = ""
+        if self._mastermind_directive:
+            directive_text = f" [MASTERMIND] {self._mastermind_directive}"
+            self._mastermind_directive = ""  # clear after showing once
+
         nudge = self._priority_nudge(trends_text)
         if nudge:
             nudge = f" >>> {nudge}"
@@ -457,6 +556,7 @@ class VisionAgent:
             f"{cooldown_text}"
             f"{dup_guard}"
             f"{mastermind_advice}"
+            f"{directive_text}"
             f"{nudge}"
         )
 
@@ -544,6 +644,54 @@ class VisionAgent:
             logger.info(f"Agent done: {decision.get('reason', '')}")
             return False
 
+        # Normalize: action field contains full function call like click(target='...')
+        func_match = re.match(r"^(\w+)\s*\((.+)\)$", action)
+        if func_match:
+            func_name = func_match.group(1)
+            func_args = func_match.group(2)
+            if func_name == "click" and "target=" in func_args:
+                val = re.search(r"target\s*=\s*['\"]([^'\"]+)['\"]", func_args)
+                if val:
+                    logger.info(f"Parsed action '{action}' -> click target='{val.group(1)}'")
+                    decision["action"] = "click"
+                    decision["target"] = val.group(1)
+            elif func_name in ("tweet", "compose", "post") and func_args:
+                val = re.search(r"['\"]([^'\"]+)['\"]", func_args)
+                if val:
+                    logger.info(f"Parsed action '{action}' -> {func_name} with text")
+                    decision["action"] = func_name
+                    decision["text"] = val.group(1)
+            elif func_name == "reply" and func_args:
+                parts = [p.strip() for p in func_args.split(",")]
+                idx_match = re.search(r"\d+", parts[0]) if parts else None
+                text_match = re.search(r"['\"]([^'\"]+)['\"]", func_args) if len(parts) > 1 else None
+                logger.info(f"Parsed action '{action}' -> reply with idx={idx_match.group(0) if idx_match else '?'}")
+                decision["action"] = "reply"
+                if idx_match:
+                    decision["tweet_index"] = int(idx_match.group(0))
+                if text_match:
+                    decision["text"] = text_match.group(1)
+            elif func_name == "search_topic" and func_args:
+                val = re.search(r"['\"]([^'\"]+)['\"]", func_args)
+                if val:
+                    logger.info(f"Parsed action '{action}' -> search_topic('{val.group(1)}')")
+                    decision["action"] = "search_topic"
+                    decision["text"] = val.group(1)
+            elif func_name == "click_trend":
+                idx_match = re.search(r"\d+", func_args)
+                decision["action"] = "click_trend"
+                if idx_match:
+                    decision["tweet_index"] = int(idx_match.group(0))
+                logger.info(f"Normalized {action} -> click_trend with tweet_index={decision.get('tweet_index', 0)}")
+            elif func_name == "not_interested":
+                idx_match = re.search(r"\d+", func_args)
+                decision["action"] = "not_interested"
+                if idx_match:
+                    decision["tweet_index"] = int(idx_match.group(0))
+                logger.info(f"Normalized {action} -> not_interested with tweet_index={decision.get('tweet_index', 0)}")
+
+        action = decision["action"]  # re-sync after function-call normalization
+
         target = str(decision.get("target", "")).strip()
         m = re.match(r"^click\s*\(\s*target\s*=\s*['\"]([^'\"]+)['\"]\s*\)$", target, re.IGNORECASE)
         if m:
@@ -561,8 +709,20 @@ class VisionAgent:
             idx = decision.get("tweet_index", 0)
             logger.info(f"Normalized click(target={target}) -> explore_link (LLM meant 'go to Explore')")
             decision["target"] = "explore_link"
+        if action == "click" and re.match(r"idx[=_ ]\d+", target_lower):
+            idx = int(re.search(r"\d+", target_lower).group(0))
+            logger.info(f"Normalized click(target='{target}') -> click_trend with tweet_index={idx}")
+            decision["action"] = "click_trend"
+            decision["tweet_index"] = idx
+            action = "click_trend"
         elif "click_trend" in action:
-            idx = decision.get("tweet_index", 0)
+            idx = decision.get("tweet_index")
+            if idx is None:
+                free = [i for i in range(8) if i not in self._used_trend_indices]
+                idx = free[0] if free else 0
+                logger.info(f"click_trend without index — picking free index {idx} from {free}")
+            else:
+                idx = int(idx)
             logger.info(f"Normalized {action} -> click_trend with tweet_index={idx}")
             decision["action"] = "click_trend"
             decision["tweet_index"] = idx
@@ -581,6 +741,76 @@ class VisionAgent:
 
         INDEXED_ACTIONS = {"like", "reply", "retweet", "quote", "bookmark", "open_tweet", "like_comment", "open_profile"}
         tweet_idx = params.get("tweet_index")
+
+        if action in INDEXED_ACTIONS and self._on_own_profile():
+            logger.info(f"Blocked {action} — on own profile, cannot engage own posts")
+            self.memory.record_action(action, params, decision.get("reason", ""), False)
+            return True
+
+        if action == "reply":
+            # Mastermind reply approval
+            if self.mastermind:
+                idx = int(tweet_idx) if tweet_idx is not None else 0
+                post_text = ""
+                author = "someone"
+                try:
+                    tweet_els = self.page.locator('[data-testid="tweetText"]').all()
+                    if idx < len(tweet_els):
+                        post_text = tweet_els[idx].inner_text(timeout=2000)[:300]
+                except Exception:
+                    pass
+                try:
+                    author_els = self.page.locator('[data-testid="User-Name"]').all()
+                    if idx < len(author_els):
+                        author = author_els[idx].inner_text(timeout=2000)[:50]
+                except Exception:
+                    pass
+
+                last12 = self.memory.actions[-12:]
+                ctx_parts = []
+                for a in last12:
+                    an = a["action"]
+                    ap = a.get("params", {})
+                    ar = a.get("reason", "")
+                    if an in ("like", "retweet", "reply", "bookmark", "quote", "open_tweet"):
+                        ctx_parts.append(f"{an}[idx={ap.get('tweet_index','?')}]: {ar[:60]}")
+                    elif an == "search_topic":
+                        ctx_parts.append(f"search_topic('{ap.get('text','')}'): {ar[:60]}")
+                    elif an == "click_trend":
+                        ctx_parts.append(f"click_trend({ap.get('tweet_index','?')})")
+                    elif an in ("scroll_down", "scroll_down_long"):
+                        ctx_parts.append(an)
+                analyst_ctx = "; ".join(ctx_parts[-8:])
+
+                approved, result = self.mastermind.approve_reply(
+                    post_text=post_text, author=author,
+                    analyst_context=analyst_ctx,
+                    avoid_keywords=MILITARY_GOVT_KEYWORDS,
+                )
+                if not approved:
+                    logger.info(f"Mastermind REJECTED reply: {result[:100]}")
+                    self.memory.record_action(action, params, f"mastermind rejected: {result[:60]}", False)
+                    if "BEST-TO-DO:" in result:
+                        self._mastermind_directive = result.split("BEST-TO-DO:")[-1].strip()
+                        logger.info(f"[MASTERMIND] Directive: {self._mastermind_directive}")
+                    return True
+                params["text"] = result
+                decision["text"] = result
+                logger.info(f"Mastermind APPROVED reply: {result[:100]}")
+
+        if action == "click_trend" and tweet_idx is not None:
+            idx = int(tweet_idx)
+            if idx in self._used_trend_indices:
+                free = [i for i in range(8) if i not in self._used_trend_indices]
+                if free:
+                    idx = free[0]
+                    logger.info(f"Trend index {tweet_idx} already clicked — auto-correcting to {idx}")
+                    params["tweet_index"] = idx
+                    tweet_idx = idx
+                else:
+                    logger.info(f"Blocked trend index {idx} — already clicked. Free: {free}")
+                    self.memory.record_action(action, params, decision.get("reason", ""), False)
+                    return True
         if tweet_idx is not None and action in INDEXED_ACTIONS:
             count = len(self.page.locator(SELECTORS["tweet_article"]).all())
             if count == 0:
@@ -605,6 +835,16 @@ class VisionAgent:
                     return True
                 return True
         self._compose_streak = 0
+
+        # Hard block: on search results, only allow staying actions
+        SEARCH_STAY = {"scroll", "scroll_down", "scroll_down_long", "scroll_up",
+                       "like", "reply", "retweet", "quote", "bookmark",
+                       "open_tweet", "like_comment", "open_profile", "follow",
+                       "back", "search_topic", "wait", "rest", "done"}
+        if "/search?" in self._safe_url() and action not in SEARCH_STAY:
+            logger.info(f"Blocked {action} — on search results, must stay and engage")
+            self.memory.record_action(action, params, "on search results, must stay and engage", False)
+            return True
 
         FORCE_AFTER = 2
         explore_visits = sum(
@@ -633,7 +873,15 @@ class VisionAgent:
             return True
 
         if action in SCROLL_ACTIONS and self._scroll_streak() >= 3:
-            logger.info(f"Blocked scroll — streak={self._scroll_streak()}, forcing engagement")
+            exhausted = self._feed_exhausted()
+            logger.info(f"Blocked scroll — streak={self._scroll_streak()}{', feed exhausted' if exhausted else ''}")
+            if exhausted and "explore" not in self._safe_url():
+                logger.info("Feed exhausted — redirecting to search")
+                kw = random.choice(["forex", "trading", "stocks", "saham", "investasi", "gold", "bitcoin", "market"])
+                self.memory.record_action(action, params, decision.get("reason", ""), False)
+                execute_action(self.page, "search_topic", {"text": kw})
+                self.memory.record_action("search_topic", {"text": kw}, "auto-search after feed exhausted", True)
+                return True
             self.memory.record_action(action, params, decision.get("reason", ""), False)
             return True
 
@@ -648,29 +896,94 @@ class VisionAgent:
             self.memory.record_action(action, params, decision.get("reason", ""), False)
             return True
 
-        DUPE_TIMEOUT = random.randint(180, 900)  # 3-15 min
-        DUPE_CHECKED = {"reply", "like", "retweet", "quote", "bookmark"}
-        if action in DUPE_CHECKED and tweet_idx is not None:
-            if self.memory.is_duplicate(action, int(tweet_idx), DUPE_TIMEOUT):
-                logger.info(f"Blocked duplicate {action} on tweet_index={tweet_idx} (still in {DUPE_TIMEOUT}s timeout)")
-                self.memory.record_action(action, params, decision.get("reason", ""), False)
-                recent = [a for a in self.memory.actions[-5:] if a["action"] in DUPE_CHECKED and not a.get("success")]
-                if len(recent) >= 2:
-                    logger.info("Duplicate streak — forcing redirect to break loop")
-                    execute_action(self.page, "click", {"target": "explore_link"})
-                    self.memory.record_action("click", {"target": "explore_link"}, "auto-escape dupe loop", True)
+        if action in POST_ACTIONS and self.mastermind:
+            last12 = self.memory.actions[-12:]
+            context_parts = []
+            for a in last12:
+                a_name = a["action"]
+                a_params = a.get("params", {})
+                a_reason = a.get("reason", "")
+                if a_name in ("like", "retweet", "reply", "bookmark", "quote", "open_tweet"):
+                    context_parts.append(f"{a_name}[idx={a_params.get('tweet_index','?')}]: {a_reason[:60]}")
+                elif a_name == "search_topic":
+                    context_parts.append(f"search_topic('{a_params.get('text','')}'): {a_reason[:60]}")
+                elif a_name in ("scroll_down", "scroll_down_long", "scroll_up"):
+                    context_parts.append(f"{a_name}")
+                elif a_name == "click_trend":
+                    context_parts.append(f"click_trend({a_params.get('tweet_index','?')})")
+            analyst_ctx = "; ".join(context_parts[-10:])
+
+            # Extract post texts the analyst engaged with
+            post_texts = []
+            try:
+                tweet_els = self.page.locator('[data-testid="tweetText"]').all()
+                for el in tweet_els[:5]:
+                    try:
+                        txt = el.inner_text(timeout=1000)
+                        if txt.strip():
+                            post_texts.append(txt.strip()[:200])
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            trends = self._extract_trends()
+            approved, result = self.mastermind.approve_post(
+                trends_text=trends or "",
+                post_texts=post_texts,
+                analyst_context=analyst_ctx,
+                avoid_keywords=MILITARY_GOVT_KEYWORDS,
+            )
+            if not approved:
+                logger.info(f"Mastermind REJECTED post: {result[:100]}")
+                self.memory.record_action(action, params, f"mastermind rejected: {result[:60]}", False)
+                # Extract BEST-TO-DO directive from rejection
+                self._mastermind_directive = ""
+                if "BEST-TO-DO:" in result:
+                    self._mastermind_directive = result.split("BEST-TO-DO:")[-1].strip()
+                    logger.info(f"[MASTERMIND] Directive: {self._mastermind_directive}")
                 return True
+            params["text"] = result
+            decision["text"] = result
+            logger.info(f"Mastermind APPROVED post: {result[:100]}")
 
         success = execute_action(self.page, action, params)
 
+        if success and action == "click_trend" and tweet_idx is not None:
+            self._used_trend_indices.add(int(tweet_idx))
+            logger.info(f"Tracked used trend index {tweet_idx} ({len(self._used_trend_indices)} used)")
+
         self.memory.record_action(action, params, decision.get("reason", ""), success)
         if not success:
-            logger.info(f"Action '{action}' failed, running fallback (click home or go home)")
-            fallback_ok = execute_action(self.page, "click", {"target": "home_link"})
-            if not fallback_ok:
-                logger.info("Fallback click failed, navigating to home directly")
-                execute_action(self.page, "navigate", {"url": "https://x.com/home"})
-            self.memory.record_action("fallback_home", {}, "auto-fallback after failure", True)
+            logger.info(f"Action '{action}' failed — retrying once")
+            time.sleep(random.uniform(1, 2))
+        # Finance gate: block engagement on non-finance posts
+        FINANCE_CHECKED = {"like", "reply", "retweet", "quote", "bookmark"}
+        if action in FINANCE_CHECKED and tweet_idx is not None:
+            post_text = ""
+            try:
+                tweet_els = self.page.locator('[data-testid="tweetText"]').all()
+                if int(tweet_idx) < len(tweet_els):
+                    post_text = tweet_els[int(tweet_idx)].inner_text(timeout=3000)
+            except Exception:
+                pass
+            if post_text and not is_finance_related(post_text):
+                logger.info(f"Non-finance post at #{tweet_idx}, blocking {action} and marking not_interested")
+                execute_action(self.page, "not_interested", {"tweet_index": int(tweet_idx)})
+                self.memory.record_action(action, params, "blocked: non-finance post", False)
+                return True
+
+        success = execute_action(self.page, action, params)
+            if success:
+                logger.info(f"Retry of '{action}' succeeded")
+                self.memory.record_action(action, params, "retry after failure", True)
+            else:
+                logger.info(f"Retry of '{action}' also failed, running fallback (click home)")
+                fallback_ok = execute_action(self.page, "click", {"target": "home_link"})
+                if not fallback_ok:
+                    logger.info("Fallback click failed, navigating to home directly")
+                    execute_action(self.page, "navigate", {"url": "https://x.com/home"})
+                self.memory.record_action("fallback_home", {}, "auto-fallback after failure", True)
 
         delay = random_delay(config.MIN_DELAY_SECONDS, config.MAX_DELAY_SECONDS)
         logger.debug(f"Delayed {delay:.1f}s after action")

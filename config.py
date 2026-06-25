@@ -35,6 +35,7 @@ class Config:
     MAX_REPLIES_PER_SESSION: int = int(os.getenv("MAX_REPLIES_PER_SESSION", "10"))
     MAX_RETWEETS_PER_SESSION: int = int(os.getenv("MAX_RETWEETS_PER_SESSION", "8"))
     MAX_ENGAGEMENTS: int = int(os.getenv("MAX_ENGAGEMENTS", "30"))
+    MIN_GAP_BETWEEN_REPLIES: int = int(os.getenv("MIN_GAP_BETWEEN_REPLIES", "180"))
 
     # Persona
     DEFAULT_PERSONA: str = os.getenv("DEFAULT_PERSONA", "finance_investor")

@@ -28,20 +28,21 @@ class Mastermind:
 
         logger.info(f"[MASTERMIND] Searching web: {query}")
         try:
-            resp = requests.get(
-                "https://api.duckduckgo.com/",
-                params={"q": query, "format": "json", "no_html": 1, "skip_disambig": 1},
-                timeout=10,
+            resp = requests.post(
+                "https://html.duckduckgo.com/html/",
+                data={"q": query},
+                headers={
+                    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                },
+                timeout=15,
             )
             if resp.status_code == 200:
-                data = resp.json()
+                urls = re.findall(r'class="result__url"[^>]*href="(https?://[^"]+)"', resp.text)
+                snippets = re.findall(r'class="result__snippet"[^>]*>(.*?)</(?:a|span)>', resp.text, re.DOTALL)
                 parts = []
-                if data.get("AbstractText"):
-                    parts.append(data["AbstractText"])
-                if data.get("RelatedTopics"):
-                    for t in data["RelatedTopics"][:max_results]:
-                        if isinstance(t, dict) and t.get("Text"):
-                            parts.append(t["Text"])
+                for i in range(min(max_results, len(urls), len(snippets))):
+                    snippet = re.sub(r"<[^>]+>", "", snippets[i]).strip()
+                    parts.append(f"{urls[i]}: {snippet}")
                 if parts:
                     result = "\n".join(parts)
                     cache[key] = {"content": result, "timestamp": time.time()}
@@ -163,10 +164,6 @@ class Mastermind:
         research = ""
         search_suggestion = ""
         if blocked_trend:
-            import re as _re
-            matches = _re.findall(r"'([^']+)' is RESTRICTED", blocked_trend)
-            if matches:
-                pass
             persona_topics = [t for t in self.persona.topics if not any(kw in t.lower() for kw in (avoid_keywords or set()))]
             if persona_topics:
                 search_suggestion = f"search_topic('{persona_topics[0]}') for safe content."
@@ -174,8 +171,11 @@ class Mastermind:
         if trends_text and not blocked_trend:
             trend_lines = trends_text.replace("Trending now: ", "").split("; ")[:2]
             if trend_lines:
-                query = trend_lines[0][:60]
-                research = self.search_web(query)
+                # Extract actual trend title (first line before metadata/location)
+                parts = trend_lines[0].strip().split("\n")
+                query = parts[0].strip()[:60]
+                if query:
+                    research = self.search_web(query)
 
         prompt = (
             f"You are the MASTERMIND. The Analyst is mid-session.\n\n"
@@ -230,6 +230,174 @@ class Mastermind:
             f"WARNINGS: Avoid military/politics. Never reveal bot identity."
         )
         return self._brief
+
+    def approve_post(self, trends_text: str, post_texts: list[str], analyst_context: str,
+                     avoid_keywords: Optional[set] = None) -> tuple[bool, str]:
+        """Mastermind researches trends, evaluates relevance, generates or denies.
+
+        Returns (approved: bool, text: str).
+        - If approved: text is the EXACT tweet content to post verbatim.
+        - If rejected: text starts with REJECTED and includes BEST-TO-DO directive.
+        """
+        # Use first trend as research topic
+        trend_lines = trends_text.replace("Trending now: ", "").split("; ") if trends_text else []
+        topic = trend_lines[0][:100] if trend_lines else (self.persona.topics[0] if self.persona.topics else "finance")
+
+        # Check restricted keywords
+        restricted = ""
+        if avoid_keywords:
+            check_text = f"{topic} {' '.join(post_texts)}"
+            for kw in avoid_keywords:
+                if kw.lower() in check_text.lower():
+                    restricted = f"TOPIC CONTAINS RESTRICTED KEYWORD '{kw}'"
+                    break
+
+        # Web research
+        web_info = self.search_web(topic) if not restricted else ""
+
+        persona_prompt = self.persona.build_system_prompt()
+
+        prompt = (
+            f"You are the MASTERMIND. The Analyst has gathered context and wants to post.\n\n"
+            f"SESSION BRIEF:\n{self._brief}\n\n"
+            f"ANALYST RECENT ACTIONS:\n{analyst_context}\n\n"
+            f"TRENDING:\n{trends_text or '(none visible)'}\n\n"
+            f"POSTS ANALYST ENGAGED WITH:\n"
+        )
+        if post_texts:
+            for i, t in enumerate(post_texts[:5]):
+                prompt += f"  Post {i+1}: {t[:200]}\n"
+        else:
+            prompt += "  (none captured)\n"
+
+        if restricted:
+            prompt += f"\nBLOCKED: {restricted}\n"
+        elif web_info:
+            prompt += f"\nWEB RESEARCH (current topic):\n{web_info[:800]}\n"
+
+        prompt += (
+            f"\nPERSONA WRITING RULES:\n{persona_prompt}\n\n"
+            f"YOUR JOB:\n"
+            f"1. Evaluate: is this topic relevant to the persona's interests (finance/forex/trading)?\n"
+            f"2. Is it safe (not military/govt/NSFW)?\n"
+            f"3. Is there enough context to write something valuable?\n\n"
+            f"DECIDE:\n"
+            f"- If YES to all: WRITE the EXACT tweet text the Analyst must post.\n"
+            f"  Format: APPROVED: [exact tweet text — max 280 chars. Follow persona tone + rules.]\n\n"
+            f"- If NO: REJECT then give a DIRECT BEST-TO-DO action for the Analyst.\n"
+            f"  Format: REJECTED: [reason]. BEST-TO-DO: [specific action like search_topic('keyword') or click(target='...') or like(0)]\n\n"
+            f"CRITICAL:\n"
+            f"- NO hashtags or @mentions.\n"
+            f"- Positive framing. Match language of the posts.\n"
+            f"- Write as a finance/investor persona, not a bot."
+        )
+
+        resp = self.llm.text_chat(
+            system_prompt="You are a strategic mastermind and content writer. Research, decide, then write or redirect.",
+            user_text=prompt,
+            temperature=0.7,
+            max_tokens=250,
+        )
+
+        if not resp or not resp.content:
+            logger.warning("[MASTERMIND] Post approval LLM returned nothing")
+            return False, f"REJECTED: Mastermind unavailable. BEST-TO-DO: {self._best_do_fallback(topic)}"
+
+        content = resp.content.strip()
+        if content.startswith("REJECTED"):
+            logger.info(f"[MASTERMIND] Post REJECTED: {content[:100]}")
+            if "BEST-TO-DO:" not in content:
+                content += f" BEST-TO-DO: {self._best_do_fallback(topic)}"
+            return False, content
+
+        if content.startswith("APPROVED:"):
+            tweet_text = content[len("APPROVED:"):].strip()
+            logger.info(f"[MASTERMIND] Post APPROVED: {tweet_text[:100]}")
+            return True, tweet_text
+
+        # LLM didn't follow format — assume approved raw text
+        logger.info(f"[MASTERMIND] Post approved (raw): {content[:100]}")
+        return True, content
+
+    def _best_do_fallback(self, topic: str) -> str:
+        topics = ", ".join(self.persona.topics[:3])
+        return f"search_topic('{topics.split(', ')[0]}') for relevant content."
+
+    def approve_reply(self, post_text: str, author: str, analyst_context: str,
+                      avoid_keywords: Optional[set] = None) -> tuple[bool, str]:
+        """Analyst wants to reply to a specific post. Mastermind researches, writes the comment.
+
+        Returns (approved: bool, text: str).
+        - If approved: text is the EXACT comment to post verbatim.
+        - If rejected: text starts with REJECTED and includes BEST-TO-DO directive.
+        """
+        # Check restricted keywords
+        restricted = ""
+        if avoid_keywords and post_text:
+            for kw in avoid_keywords:
+                if kw.lower() in post_text.lower():
+                    restricted = f"POST CONTAINS RESTRICTED KEYWORD '{kw}'"
+                    break
+
+        # Web search on the post topic for context
+        web_info = self.search_web(post_text[:100]) if not restricted and post_text else ""
+
+        persona_prompt = self.persona.build_system_prompt()
+
+        prompt = (
+            f"You are the MASTERMIND. The Analyst wants to REPLY to a post.\n\n"
+            f"SESSION BRIEF:\n{self._brief}\n\n"
+            f"ANALYST RECENT ACTIONS:\n{analyst_context}\n\n"
+            f"REPLYING TO — Author: {author}\n"
+            f"POST TEXT: {post_text[:300]}\n\n"
+        )
+        if restricted:
+            prompt += f"BLOCKED: {restricted}\n"
+        elif web_info:
+            prompt += f"WEB RESEARCH (for context):\n{web_info[:600]}\n"
+
+        prompt += (
+            f"\nPERSONA WRITING RULES:\n{persona_prompt}\n\n"
+            f"YOUR JOB — write a relevant COMMENT on this post:\n"
+            f"1. Is this post relevant to finance/forex/trading? If NO → REJECT.\n"
+            f"2. Is it safe (not military/govt/NSFW)? If NO → REJECT.\n"
+            f"3. If YES: write a SHORT, relevant reply. Match the post's language.\n"
+            f"4. Add value — share your take, analysis, or insight. Don't just agree.\n\n"
+            f"DECIDE:\n"
+            f"- If YES: APPROVED: [exact reply text — under 200 chars. Natural, human, no hashtags.]\n"
+            f"- If NO: REJECTED: [reason]. BEST-TO-DO: [specific action like search_topic('keyword') or click(target='...') or like(0)]\n\n"
+            f"CRITICAL:\n"
+            f"- Reply directly to the post content — don't change the subject.\n"
+            f"- Match language (Bahasa for Bahasian posts, English for English posts).\n"
+            f"- Positive framing. No hashtags or @mentions.\n"
+            f"- Write as human finance/investor, not bot."
+        )
+
+        resp = self.llm.text_chat(
+            system_prompt="You are a strategic mastermind. Write relevant, natural comments.",
+            user_text=prompt,
+            temperature=0.7,
+            max_tokens=200,
+        )
+
+        if not resp or not resp.content:
+            logger.warning("[MASTERMIND] Reply approval LLM returned nothing")
+            return False, f"REJECTED: Mastermind unavailable. BEST-TO-DO: {self._best_do_fallback(post_text[:50])}"
+
+        content = resp.content.strip()
+        if content.startswith("REJECTED"):
+            logger.info(f"[MASTERMIND] Reply REJECTED: {content[:100]}")
+            if "BEST-TO-DO:" not in content:
+                content += f" BEST-TO-DO: {self._best_do_fallback(post_text[:50])}"
+            return False, content
+
+        if content.startswith("APPROVED:"):
+            reply_text = content[len("APPROVED:"):].strip()
+            logger.info(f"[MASTERMIND] Reply APPROVED: {reply_text[:100]}")
+            return True, reply_text
+
+        logger.info(f"[MASTERMIND] Reply approved (raw): {content[:100]}")
+        return True, content
 
     def save(self):
         self.knowledge.save()

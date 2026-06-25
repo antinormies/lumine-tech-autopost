@@ -207,8 +207,14 @@ def retweet_nth(page: Page, index: int = 0) -> bool:
     tweets = page.locator(SELECTORS["tweet_article"]).all()
     if index >= len(tweets):
         return False
+    article = tweets[index]
     try:
-        rt_btn = tweets[index].locator(SELECTORS["retweet_button"])
+        article.scroll_into_view_if_needed(timeout=3000)
+        time.sleep(random.uniform(0.3, 0.8))
+        rt_btn = article.locator(SELECTORS["retweet_button"])
+        if not rt_btn.is_visible(timeout=2000):
+            logger.warning(f"Retweet button not visible on tweet #{index}")
+            return False
         rt_btn.click()
         confirm = page.locator(SELECTORS["retweet_confirm"])
         confirm.wait_for(timeout=3000)
@@ -224,16 +230,41 @@ def quote_tweet(page: Page, index: int, text: str) -> bool:
     tweets = page.locator(SELECTORS["tweet_article"]).all()
     if index >= len(tweets):
         return False
+    article = tweets[index]
     try:
         _jitter_mouse(page)
-        rt_btn = tweets[index].locator(SELECTORS["retweet_button"])
-        rt_btn.scroll_into_view_if_needed(timeout=3000)
-        rt_btn.click()
-        time.sleep(random.uniform(0.5, 1.5))
+        article.scroll_into_view_if_needed(timeout=3000)
+        time.sleep(random.uniform(0.3, 0.8))
+
+        rt_btn = article.locator(SELECTORS["retweet_button"])
+        if not rt_btn.is_visible(timeout=2000):
+            logger.warning(f"Retweet/repost button not visible on tweet #{index}")
+            return False
+        rt_btn.click(force=True, timeout=5000)
+        time.sleep(random.uniform(1, 2))
+
         quote_btn = page.locator(SELECTORS["quote_option"])
-        quote_btn.wait_for(timeout=5000)
-        quote_btn.click()
-        time.sleep(random.uniform(0.5, 1.5))
+        for attempt in range(3):
+            try:
+                quote_btn.wait_for(timeout=2000)
+                if quote_btn.is_visible():
+                    break
+            except Exception:
+                if attempt < 2:
+                    rt_btn.click(force=True, timeout=3000)
+                    time.sleep(random.uniform(1, 2))
+                else:
+                    logger.warning("Quote option not found, falling back to retweet")
+                    retweet_btn = page.locator(SELECTORS["retweet_button"])
+                    if retweet_btn.is_visible(timeout=1000):
+                        retweet_btn.click(force=True)
+                        logger.info(f"Retweeted tweet #{index} (quote unavailable)")
+                        time.sleep(1)
+                        return True
+                    return False
+
+        quote_btn.click(force=True)
+        time.sleep(random.uniform(1, 2))
         compose = page.locator(SELECTORS["tweet_compose"])
         compose.wait_for(timeout=5000)
         compose.focus()
@@ -272,6 +303,35 @@ def bookmark_nth(page: Page, index: int = 0) -> bool:
         return False
 
 
+def not_interested(page: Page, index: int = 0) -> bool:
+    """Mark a tweet as 'Not interested in this post' to train the algorithm."""
+    tweets = page.locator(SELECTORS["tweet_article"]).all()
+    if index >= len(tweets):
+        return False
+    for attempt in range(2):
+        try:
+            _jitter_mouse(page)
+            caret = tweets[index].locator(SELECTORS["tweet_caret"])
+            caret.scroll_into_view_if_needed(timeout=3000)
+            time.sleep(random.uniform(0.3, 0.8))
+            caret.click(timeout=5000)
+            time.sleep(random.uniform(1.5, 3))
+
+            menu_item = page.locator(SELECTORS["not_interested"]).first
+            menu_item.wait_for(timeout=5000)
+            menu_item.click()
+            logger.info(f"Marked tweet #{index} as not interested")
+            time.sleep(1)
+            return True
+        except Exception as e:
+            if attempt == 0:
+                logger.info(f"not_interested attempt 1 failed for tweet #{index}, retrying: {e}")
+                time.sleep(1)
+            else:
+                logger.warning(f"Failed to mark tweet #{index} as not interested: {e}")
+                return False
+
+
 def open_tweet(page: Page, index: int = 0) -> bool:
     tweets = page.locator(SELECTORS["tweet_article"]).all()
     if index >= len(tweets):
@@ -293,12 +353,14 @@ def open_tweet(page: Page, index: int = 0) -> bool:
 
 def like_comment(page: Page, index: int = 0) -> bool:
     """Like a comment/reply within a tweet detail page.
-    Comments are articles with data-testid='tweet' inside the detail view.
+    Articles[0] is the main tweet; comments start at index 1.
+    like_comment(0) = first comment.
     """
     comments = page.locator(SELECTORS["tweet_article"]).all()
-    if 0 <= index < len(comments):
+    comment_idx = index + 1
+    if comment_idx < len(comments):
         try:
-            like_btn = comments[index].locator(SELECTORS["like_button"])
+            like_btn = comments[comment_idx].locator(SELECTORS["like_button"])
             if like_btn.is_visible(timeout=3000):
                 like_btn.click()
                 logger.info(f"Liked comment #{index}")
@@ -440,6 +502,7 @@ def search_topic(page: Page, query: str) -> bool:
     if not query:
         logger.warning("No search query provided")
         return False
+    query = query[:50]  # truncate long queries
     try:
         search_input = page.locator(SELECTORS["search_box"])
         if search_input.count() == 0:
@@ -484,6 +547,7 @@ ACTION_REGISTRY = {
     "back": lambda page, params: go_back(page),
     "follow": lambda page, params: follow(page),
     "click_trend": lambda page, params: click_trend(page, params.get("tweet_index", 0)),
+    "not_interested": lambda page, params: not_interested(page, params.get("tweet_index", 0)),
     "search_topic": lambda page, params: search_topic(page, params.get("text", "")),
     "rest": lambda page, params: rest(page),
 }
