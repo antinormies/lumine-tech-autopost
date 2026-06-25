@@ -119,3 +119,17 @@ class LLMClient:
                 json=payload,
                 timeout=120,
             )
+            resp.raise_for_status()
+            data = resp.json()
+            choice = data["choices"][0]
+            return LLMResponse(
+                content=choice["message"]["content"],
+                finish_reason=choice.get("finish_reason"),
+                usage=data.get("usage"),
+            )
+        except requests.exceptions.ConnectionError:
+            logger.error(f"Cannot connect to llama-server at {self.base_url}")
+            return None
+        except Exception as e:
+            logger.error(f"LLM text call failed: {e}")
+            return None

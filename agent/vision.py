@@ -85,42 +85,44 @@ VISION_SYSTEM_INSTRUCTION = (
      "PHASE 1 — HOME FEED (main activity, spend most of your time here):\n"
     "1. scroll_down_long through the feed. Scroll OFTEN (every 1-2 actions).\n"
     "2. Like(N) finance/forex posts. not_interested(N) on non-finance to train the algorithm.\n"
-    "3. REPLY to finance/forex posts with your analysis.\n"
+    "3. REPLY to finance/forex posts with your analysis — do this OFTEN (every few posts).\n"
     "4. open_tweet -> like comments -> reply. open_profile -> follow.\n"
-    "5. RETWEET, QUOTE, BOOKMARK interesting finance posts.\n"
-    "6. Scroll some more. Keep engaging.\n"
-    "7. Occasionally tweet(text) an original thought — share your market take if cooldown allows.\n\n"
-    "PHASE 2 — SEARCH (when home feed gets stale or you want targeted content):\n"
-    "7. search_topic('keyword') — e.g. search_topic('trading'), search_topic('stocks'), search_topic('saham'), search_topic('crypto'). Vary your keywords.\n"
-    "8. Use SHORT keywords (1-3 words). NOT full sentences.\n"
-    "9. scroll_down_long through search results. LIKE + REPLY + RETWEET + BOOKMARK + QUOTE.\n"
-    "10. STAY on search results. Do NOT go to Explore/trends from search.\n"
-    "11. open_tweet -> reply -> like comments. open_profile -> follow.\n"
-    "12. Try different search terms to find fresh content. REPLY often.\n\n"
-    "PHASE 3 — EXPLORE (periodic trend check, less frequent):\n"
-    "13. Occasionally click(target='explore_link') to check what's trending.\n"
-    "14. Pick finance-related trends, click_trend(0), click_trend(1)...\n"
-    "15. Engage with trend posts: LIKE, REPLY, RETWEET. Then go back to Home.\n"
-    "16. If no finance trends, search_topic instead. Don't force trends.\n\n"
-     "PHASE 4 — ROTATE BACK:\n"
-    "18. After checking Explore, go back to Home or Search. Rotate between Home <-> Search.\n"
-    "19. Keep scrolling and engaging. Home feed + Search should be 80% of your time.\n"
-    "20. Occasionally tweet or quote about web research from Mastermind if cooldown allows.\n\n"
-     "GENERAL RULES:\n"
-    "21. Post about matching trends if cooldown allows — use web research from Mastermind.\n"
-    "22. Quote is NOT locked — use it freely.\n"
-    "23. REPLY to posts with your opinion — do this often. Reply is the most engaging action. PREFER replying to finance/forex/trading posts over buzz trending.\n"
-    "24. NEVER engage your own posts. If you see your own content, skip it. Do not like/retweet/reply/quote it.\n"
-    "25. Reply freely — no cooldown between comments.\n"
-    "26. Use 'rest' after ~150 actions. Then restart from Phase 2.\n"
-    "27. NEVER engage same tweet_index twice.\n"
-    "28. Click different trend indices (0, 1, 2, 3...) — don't always pick the first.\n"
-    "29. search_topic is a GREAT way to find content. Vary keywords: trading, stocks, saham, investasi, crypto, gold, etc.\n"
-    "30. PREFER replying to finance/forex/trading posts over general buzz trending. If a trend isn't finance-related, scroll past it and find one that is.\n"
-    "31. When on SEARCH RESULTS: STAY there. scroll_down_long through results. LIKE, REPLY, open_tweet, open_profile. Do NOT click trends or go to Explore.\n"
-    "32. Use not_interested(N) on non-finance posts to train the algorithm. Like(N) on finance posts.\n"
-    "33. NO EMOJIS/EMOTICONS in any content. Use character expressions instead (e.g. :), :(, :D, ;), :p).\n"
-    "34. Finance keywords: forex, stocks, trading, crypto, investment, economy, market, bank, fintech.\n"
+    "5. RETWEET interesting finance posts — share good content with your followers.\n"
+    "6. QUOTE a post with your insight — add your own take to trending content.\n"
+    "7. BOOKMARK posts worth saving.\n"
+    "8. Keep scrolling and engaging. RETWEET, QUOTE, REPLY more — likes are just the start.\n"
+    "9. Occasionally tweet(text) an original thought — share your market take if cooldown allows.\n\n"
+     "PHASE 2 — SEARCH (when home feed gets stale or you want targeted content):\n"
+    "10. search_topic('keyword') — e.g. search_topic('trading'), search_topic('stocks'), search_topic('saham'), search_topic('crypto'). Vary your keywords.\n"
+    "11. Use SHORT keywords (1-3 words). NOT full sentences.\n"
+    "12. scroll_down_long through search results. LIKE + REPLY + RETWEET + BOOKMARK + QUOTE.\n"
+    "13. STAY on search results. Do NOT go to Explore/trends from search.\n"
+    "14. open_tweet -> reply -> like comments. open_profile -> follow.\n"
+    "15. Try different search terms to find fresh content. REPLY often.\n\n"
+    "PHASE 3 — EXPLORE (quick trend check, keep it brief):\n"
+    "16. click(target='explore_link') to check trends quickly.\n"
+    "17. Pick finance-related trends, click_trend(0), click_trend(1)... Engage fast: RETWEET, QUOTE, REPLY.\n"
+    "18. If scrolling too much on Trending with no clear finance trend → go HOME immediately. Don't linger on Explore.\n"
+    "19. If no finance trends, search_topic instead. Don't force trends.\n\n"
+    "PHASE 4 — ROTATE BACK:\n"
+    "20. After checking Explore, go back to Home or Search. Rotate between Home <-> Search.\n"
+    "21. Keep scrolling and engaging. Home feed + Search should be 80% of your time.\n"
+    "22. Occasionally tweet or quote about web research from Mastermind if cooldown allows.\n\n"
+    "GENERAL RULES:\n"
+    "23. Post about matching trends if cooldown allows — use web research from Mastermind.\n"
+    "24. Quote is NOT locked — use it freely.\n"
+    "25. REPLY to posts with your opinion — do this often. Reply is the most engaging action. PREFER replying to finance/forex/trading posts over buzz trending.\n"
+    "26. NEVER engage your own posts. If you see your own content, skip it. Do not like/retweet/reply/quote it.\n"
+    "27. Reply freely — no cooldown between comments.\n"
+    "28. Use 'rest' after ~100 total actions. Then restart from Phase 1.\n"
+    "29. NEVER engage same tweet_index twice.\n"
+    "30. Click different trend indices (0, 1, 2, 3...) — don't always pick the first.\n"
+    "31. search_topic is a GREAT way to find content. Vary keywords: trading, stocks, saham, investasi, crypto, gold, etc.\n"
+    "32. PREFER replying to finance/forex/trading posts over general buzz trending. If a trend isn't finance-related, scroll past it and find one that is.\n"
+    "33. When on SEARCH RESULTS: STAY there. scroll_down_long through results. LIKE, REPLY, open_tweet, open_profile. Do NOT click trends or go to Explore.\n"
+    "34. Use not_interested(N) on non-finance posts to train the algorithm. Like(N) on finance posts.\n"
+    "35. NO EMOJIS/EMOTICONS in any content. Use character expressions instead (e.g. :), :(, :D, ;), :p).\n"
+    "36. Finance keywords: forex, stocks, trading, crypto, investment, economy, market, bank, fintech.\n"
     "    Also Indonesian finance terms: saham, investasi, reksadana, ihsg, bursa, rupiah.\n\n"
     "Respond ONLY JSON:\n"
     '{"action": "...", "reason": "...", "target": "...", "text": "...", "tweet_index": 0, "amount": 600, "seconds": 5}'
@@ -314,16 +316,16 @@ class VisionAgent:
 
         streak = self._scroll_streak()
         if streak >= 2:
-            exhausted = self._feed_exhausted()
-            if exhausted:
-                if on_explore:
-                    return f"FEED EXHAUSTED ({streak}x scrolls). click_trend(0) or try a different tab."
-                return f"FEED EXHAUSTED ({streak}x scrolls). {self._search_options()} or click(target='explore_link') for fresh content."
             if on_explore:
+                if self._phase_steps > 5:
+                    return f"STOP SCROLLING trends ({streak}x, step {self._phase_steps}). Go back Home — click(target='home_link')."
                 free = [i for i in range(8) if i not in self._used_trend_indices]
                 if not free:
                     return f"STOP SCROLLING ({streak}x). scroll_down_long to load more trends."
                 return f"STOP SCROLLING ({streak}x). click_trend({free[0]}) NOW."
+            exhausted = self._feed_exhausted()
+            if exhausted:
+                return f"FEED EXHAUSTED ({streak}x scrolls). {self._search_options()} or click(target='explore_link') for fresh content."
             return f"STOP SCROLLING ({streak}x). like(0) or {self._search_options(1)}."
 
         has_trends = bool(trends_text.strip())
@@ -333,16 +335,18 @@ class VisionAgent:
         if on_search_results:
             if not_interested_count < 2:
                 return "STAY on search results. not_interested(N) on non-finance posts, like(N) on finance/forex."
-            if likes < 2:
-                return "STAY on search results. Find a finance/forex post -> like(N). like(0) if it's finance, else not_interested(0)."
-            if opened < 1:
-                return "open_tweet -> like comments -> reply."
-            if profiles < 1:
-                return "open_profile on interesting people -> follow."
-            if replies < 1:
-                return "REPLY to a finance/forex post in results — share your analysis."
+            if replies < 2:
+                return "STAY on search results. REPLY to a finance/forex post — share your analysis."
+            if retweets < 1:
+                return "RETWEET an interesting post from search results."
             if quotes < 1:
                 return "QUOTE a post with your insight."
+            if likes < 3:
+                return "Find a finance/forex post -> like(N). like(0) if it's finance, else not_interested(0)."
+            if opened < 2:
+                return "open_tweet -> like comments -> reply."
+            if profiles < 2:
+                return "open_profile on interesting people -> follow."
             if self.memory.can_tweet(1.0):
                 return "Got an original take? tweet(text) to share. Else scroll more or search_topic('another keyword'). Stay on search."
             return "scroll more or search_topic('another keyword'). Stay on search."
@@ -350,35 +354,43 @@ class VisionAgent:
         # Phase 1: Home feed — cluster minimum 25 steps, scroll + engage heavily
         if not on_explore:
             if self._phase_steps < 25:
-                if not_interested_count < 5:
+                if not_interested_count < 3:
                     return "scroll_down_long -> not_interested(N) on non-finance, like(N) on finance. Scroll between posts."
-                if likes < 5:
+                if likes < 3:
                     return "scroll_down_long -> like(N) finance/forex posts. Scroll past non-finance or not_interested(N)."
-                if replies < 2:
+                if replies < 3:
                     return "REPLY to a finance post — share your analysis. Scroll and find one."
-                if opened < 3:
-                    return "open_tweet -> like comments -> reply. Then scroll more."
                 if quotes < 2:
                     return "QUOTE a finance post with your take."
-                if searches < 2:
-                    return f"search_topic('keyword') — {self._search_options(1)}. Vary your searches."
-                if profiles < 2:
-                    return "open_profile on interesting people -> follow."
                 if retweets < 2:
                     return "RETWEET a finance post."
+                if opened < 3:
+                    return "open_tweet -> like comments -> reply. Then scroll more."
                 if bookmarks < 2:
                     return "BOOKMARK a post for later."
-                if likes < 8:
+                if profiles < 2:
+                    return "open_profile on interesting people -> follow."
+                if searches < 2:
+                    return f"search_topic('keyword') — {self._search_options(1)}. Vary your searches."
+                if replies < 5:
+                    return "REPLY again — the more replies the better. Find another post to comment on."
+                if quotes < 4:
+                    return "QUOTE another post — share your perspective."
+                if retweets < 4:
+                    return "RETWEET another interesting post."
+                if likes < 6:
                     return "scroll more -> like(N) finance posts. Keep engaging home feed."
                 if self.memory.can_tweet(1.0):
                     return "Got an insight? tweet(text) to share your take, or scroll more."
-                return "scroll_down_long -> keep scrolling home feed. Like and reply to finance posts."
+                return "scroll_down_long -> keep scrolling home feed. Reply, retweet, quote — keep engaging."
             if self.memory.can_tweet(1.0):
                 return f"Home cluster done ({self._phase_steps}/25). Consider tweet(text) if you have a hot take, or search_topic/explore."
             return f"Home cluster done ({self._phase_steps}/25). Try search_topic('keyword') or click(target='explore_link') for a change."
 
-        # Phase 3: Explore — periodic trend check, less time here
+        # Phase 3: Explore — quick trend check, keep it brief
         if on_explore and self._phase_steps < 10:
+            if streak >= 2 and self._phase_steps > 5:
+                return f"Too much scrolling on trends ({streak}x). Go back Home — click(target='home_link')."
             if tab_clicks < 1 and trend_clicks < 1:
                 return "Quick check: click(target='For you') or click(target='Trending') for trends."
             if trend_clicks < 1:
@@ -388,12 +400,14 @@ class VisionAgent:
                 return f"click_trend({free[0]}) — pick a trend quickly."
             if not_interested_count < 3 and likes > 1:
                 return "not_interested(N) on non-finance trend posts."
-            if likes < 3:
+            if likes < 2:
                 return "like(N) on a FINANCE trend post. Quick check."
+            if retweets < 1:
+                return "RETWEET a trend post."
+            if quotes < 1:
+                return "QUOTE a trend post with your take."
             if replies < 1:
                 return "REPLY to a finance/forex trend post."
-            if quotes < 1:
-                return "QUOTE a trend post."
             if searches < 1:
                 return "search_topic('keyword') to find finance content after trends."
             return "Done with trends. click(target='home_link') to go back to Home or search_topic()."
@@ -407,14 +421,14 @@ class VisionAgent:
             return "scroll_down_long + like to warm up."
         if total > 8 and searches < 1:
             return f"{self._search_options()} for targeted finance content."
-        if likes < 5 and eng < max_eng:
+        if replies < 2 and eng < max_eng:
+            return "REPLY to a finance post — share your analysis."
+        if quotes < 2 and eng < max_eng:
+            return "QUOTE a post with your take."
+        if retweets < 2 and eng < max_eng:
+            return "Retweet something interesting."
+        if likes < 4 and eng < max_eng:
             return "Scroll and like finance posts in feed."
-        if quotes < 1 and eng < max_eng:
-            return "QUOTE a post."
-        if replies < 1 and eng < max_eng:
-            return "REPLY to a finance post."
-        if retweets < 1 and eng < max_eng:
-            return "Retweet something."
         if opened < 2 and eng < max_eng:
             return "open_tweet to see comments."
         if profiles < 1 and eng < max_eng:

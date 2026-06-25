@@ -104,7 +104,7 @@ Make sure llama-server is running with a vision model loaded:
 ### 2. Set up the bot
 
 ```bash
-git clone https://github.com/yourusername/lumine-tech-autopost
+git clone https://github.com/antinormies/lumine-tech-autopost
 cd lumine-tech-autopost
 
 python3 -m venv .venv
